@@ -15,10 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Notaría Digital - Sistema de Gestión de Trámites",
-  description: "Sistema moderno de gestión de trámites notariales con tecnología de punta",
+  title: "Colegio de Escribanos de Salta",
+  description: "Sistema de gestión notarial para el Colegio de Escribanos de Salta.",
   keywords: ["Notaría", "Trámites", "Gestión", "Legal", "Documentos", "Digital"],
-  authors: [{ name: "Notaría Digital" }],
+  authors: [{ name: "Agustín Jesús Navarr León" }],
   icons: {
     icon: "/logo.svg",
   },

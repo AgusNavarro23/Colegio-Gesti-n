@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { DashboardLayout, SidebarItem } from './dashboard-layout';
+import { DashboardLayout } from './dashboard-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -37,11 +37,7 @@ export function EmployeeDashboard() {
   ]);
 
   // Configuración del Sidebar
-  const menuItems: SidebarItem[] = [
-    { icon: Users, label: 'Escribanos', onClick: () => setActiveTab('escribanos'), isActive: activeTab === 'escribanos' },
-    { icon: BookOpen, label: 'Registros', onClick: () => setActiveTab('registros'), isActive: activeTab === 'registros' },
-    { icon: DollarSign, label: 'Aranceles', onClick: () => setActiveTab('aranceles'), isActive: activeTab === 'aranceles' },
-  ];
+
 
   // Manejo de Modales
   const handleOpenModal = (item: any = null) => {
@@ -121,7 +117,7 @@ export function EmployeeDashboard() {
   };
 
   return (
-    <DashboardLayout role="EMPLOYEE" title={titles[activeTab]} menuItems={menuItems}>
+    <DashboardLayout role="EMPLOYEE" title={titles[activeTab]} >
       
       <Card className="border-0 shadow-sm">
         <CardHeader className="px-6 py-4 border-b border-gray-100">
