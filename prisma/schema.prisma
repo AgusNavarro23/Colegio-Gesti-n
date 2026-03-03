@@ -29,12 +29,14 @@ model Escribano {
   id        String   @id @default(cuid())
   nombre    String
   matricula String   @unique
+  dni       String   @unique
   // Controlado en Front: "Activo", "Licencia", "Jubilado"
   estado    String   @default("Activo") 
   // Controlado en Front: "Titular", "Adjunto"
   condicion String   @default("Titular")
   registroId String? 
   registro Registro? @relation(fields: [registroId], references: [numero])
+  declaraciones DeclaracionJurada[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -43,10 +45,67 @@ model Registro {
   id        String   @id @default(cuid())
   numero    String   @unique
   direccion String
-  localidad String @default("Salta Capital") 
+  localidad String 
   // Controlado en Front: "Activo", "Inactivo"
   escribanos  Escribano[]
   estado    String   @default("Activo") 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  declaraciones DeclaracionJurada[]
+}
+
+model Arancel {
+  id String @id @default(cuid())
+  codigoRenta String 
+  descripcion String
+  minimo Float
+  maximo Float
+  porcentaje1 Float
+  porcentaje2 Float
+  porcentaje3 Float
+  adicional Float
+  detalles      DetalleDeclaracion[] // Relación con detalles de DJ
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DeclaracionJurada {
+  id         String   @id @default(cuid())
+  numerodj   String   @unique
+  codigodj   String
+  fecha_acto DateTime
+  fecha_vto  DateTime
+  aranceltip Float
+  rubroA     Float
+  rubroB     Float
+  rubroC     Float
+  rubroD     Float
+  total      Float
+
+  // Nuevas relaciones
+  registroId  String
+  registro    Registro @relation(fields: [registroId], references: [numero])
+
+  escribanoId String
+  escribano   Escribano @relation(fields: [escribanoId], references: [id])
+
+  detalles   DetalleDeclaracion[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model DetalleDeclaracion {
+  id                  String   @id @default(cuid())
+  monto               Float    
+  arancelCalculado    Float    
+
+  declaracionJuradaId String
+  declaracionJurada   DeclaracionJurada @relation(fields: [declaracionJuradaId], references: [id], onDelete: Cascade)
+
+  arancelId           String
+  arancel             Arancel           @relation(fields: [arancelId], references: [id])
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }

@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { UploadCloud } from 'lucide-react'; // Ícono para el botón de carga
+import * as XLSX from 'xlsx';
 
 export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [escribanos, setEscribanos] = useState<any[]>([]);
@@ -27,7 +29,8 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [registroSearch, setRegistroSearch] = useState('');
   const [isRegistroDropdownOpen, setIsRegistroDropdownOpen] = useState(false);
-
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '', matricula: '', condicion: 'Titular', estado: 'Activo', registroId: ''
   });
@@ -114,6 +117,85 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     }
   };
 
+const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rawData = XLSX.utils.sheet_to_json(worksheet);
+
+        // BUSCADOR INTELIGENTE DE COLUMNAS
+        const formattedData = rawData.map((row: any) => {
+          const findCol = (keywords: string[]) => {
+            const keys = Object.keys(row);
+            const foundKey = keys.find(k => 
+              keywords.some(kw => k.toLowerCase().replace(/[\s\r\n]/g, '').includes(kw.toLowerCase()))
+            );
+            return foundKey ? row[foundKey] : '';
+          };
+
+          // Mapeamos exactamente lo que trae tu archivo CSV
+          const nombre = findCol(['nombre', 'apellido']);
+          const dni = findCol(['dni', 'documento']);
+          const registroId = findCol(['registro', 'reg']);
+          const condicion = findCol(['cargo', 'condicion']);
+          const matricula = findCol(['matricula', 'matrícula']);
+
+          return {
+            nombre: nombre ? nombre.toString().trim() : 'Sin Nombre',
+            dni: dni ? dni.toString().trim() : '', // Extraemos el DNI
+            matricula: matricula ? matricula.toString().trim() : '',
+            registroId: registroId ? registroId.toString().trim() : null,
+            condicion: condicion ? condicion.toString().trim() : 'Titular',
+            estado: 'Activo',
+          };
+        }).filter(esc => esc.matricula !== ''); // Ignoramos las filas sin matrícula
+
+        if (formattedData.length === 0) {
+          toast({ title: "Error", description: "No se encontraron datos válidos. Revisa el formato.", variant: "destructive" });
+          setIsUploading(false);
+          return;
+        }
+
+        // Enviamos al Backend
+        const res = await fetch('/api/escribanos/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formattedData),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) throw new Error(result.error || 'Error al importar');
+
+        toast({ 
+          title: "Importación Finalizada", 
+          description: `Se agregaron ${result.agregados} escribanos. Se omitieron ${result.omitidos}.` 
+        });
+        
+        setIsUploadModalOpen(false);
+        fetchEscribanos();
+
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message || "No se pudo leer el archivo Excel", variant: "destructive" });
+      } finally {
+        setIsUploading(false);
+        e.target.value = ''; // Permite volver a seleccionar el mismo archivo si hubo error
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'Activo': return <Badge className="bg-green-600">Activo</Badge>;
@@ -123,10 +205,23 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     }
   };
 
-  const filteredEscribanos = escribanos.filter(e => 
-    e.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.matricula.includes(searchTerm)
-  );
+const filteredEscribanos = escribanos
+    .filter(e => 
+      e.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.matricula.includes(searchTerm)
+    )
+    .sort((a, b) => {
+      // Extraemos el número de registro de cada escribano
+      const numA = a.registroId || '';
+      const numB = b.registroId || '';
+
+      // Si uno no tiene registro y el otro sí, mandamos el vacío al final
+      if (!numA && numB) return 1;
+      if (numA && !numB) return -1;
+
+      // Si ambos tienen (o ambos no tienen), ordenamos numéricamente
+      return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+    });
 
   const totalPages = Math.max(1, Math.ceil(filteredEscribanos.length / itemsPerPage));
   const currentEscribanos = filteredEscribanos.slice(
@@ -151,6 +246,9 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             <div className="flex gap-2 w-full sm:w-auto">
                 <Button variant="outline" size="icon" onClick={fetchEscribanos} title="Recargar">
                     <RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </Button>
+                <Button variant="secondary" onClick={() => setIsUploadModalOpen(true)} className="gap-2 w-full sm:w-auto">
+                  <UploadCloud className="w-4 h-4" /> Importar Excel
                 </Button>
                 <Button onClick={() => handleOpenModal()} className="gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Nuevo</Button>
             </div>
@@ -300,6 +398,40 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isSaving}>Cancelar</Button>
               <Button onClick={handleSave} disabled={isSaving}>
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Guardar
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Lista de Escribanos</DialogTitle>
+            <DialogDescription>
+              Sube un archivo Excel (.xlsx o .xls) con el listado de escribanos. 
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors">
+              <UploadCloud className="w-10 h-10 text-gray-400 mx-auto mb-4" />
+              <p className="text-sm text-gray-600 mb-2">Haz clic abajo para seleccionar tu archivo Excel</p>
+              
+              <div className="mt-4">
+                <Input 
+                  id="excel-upload" 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setIsUploadModalOpen(false)} disabled={isUploading}>
+                Cancelar
               </Button>
             </DialogFooter>
           </div>

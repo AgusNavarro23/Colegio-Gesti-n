@@ -17,14 +17,21 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { numero, direccion, estado } = body;
+    // 1. AGREGA 'localidad' A LA EXTRACCIÓN DEL BODY
+    const { numero, direccion, estado, localidad } = body;
 
     if (!numero || !direccion) {
       return NextResponse.json({ error: 'Faltan campos' }, { status: 400 });
     }
 
     const nuevo = await prisma.registro.create({
-      data: { numero, direccion, estado: estado || 'Activo' },
+      // 2. AGREGA 'localidad' A LOS DATOS DE PRISMA
+      data: { 
+        numero, 
+        direccion, 
+        estado: estado || 'Activo',
+        localidad: localidad || 'Salta Capital' 
+      },
     });
 
     return NextResponse.json(nuevo, { status: 201 });
@@ -37,13 +44,20 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, numero, direccion, estado } = body;
+    // 3. AGREGA 'localidad' EN EL MÉTODO PUT
+    const { id, numero, direccion, estado, localidad } = body;
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
     const actualizado = await prisma.registro.update({
       where: { id },
-      data: { numero, direccion, estado },
+      // 4. ACTUALIZA LA LOCALIDAD EN LA BASE DE DATOS
+      data: { 
+        numero, 
+        direccion, 
+        estado,
+        localidad
+      },
     });
 
     return NextResponse.json(actualizado);
@@ -63,7 +77,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Eliminado correctamente' });
   } catch (error) {
-    // Si tiene escribanos asociados, Prisma lanzará error (dependiendo de la config), es mejor avisar
     return NextResponse.json({ error: 'No se puede eliminar (posiblemente tenga escribanos asociados)' }, { status: 500 });
   }
 }

@@ -37,6 +37,7 @@ export function DashboardLayout({ children, role, title }: DashboardLayoutProps)
     { icon: FileText, label: 'Solicitudes', href: '/employee' },
     { icon: Users, label: 'Escribanos', href: '/employee/escribanos' },
     { icon: BookOpen, label: 'Registros', href: '/employee/registros' },
+    { icon: FileText, label: 'Declaraciones', href: '/employee/declaraciones' },
     { icon: DollarSign, label: 'Aranceles', href: '/employee/aranceles' },
   ];
 
