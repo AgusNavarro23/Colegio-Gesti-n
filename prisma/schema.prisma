@@ -71,10 +71,12 @@ model Arancel {
 
 model DeclaracionJurada {
   id         String   @id @default(cuid())
-  numerodj   String   @unique
+  numerodj   String   
   codigodj   String
   fecha_acto DateTime
   fecha_vto  DateTime
+  fecha_pago DateTime?
+  anio       Int @default(2026)
   aranceltip Float
   rubroA     Float
   rubroB     Float
@@ -93,6 +95,8 @@ model DeclaracionJurada {
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@unique([numerodj, registroId, anio])
 }
 
 model DetalleDeclaracion {

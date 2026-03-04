@@ -20,7 +20,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 4;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -28,7 +28,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   // Estado del formulario actualizado
   const [formData, setFormData] = useState({ 
     codigo: '', descripcion: '', minimo: '', maximo: '', 
-    porcentaje1: '', porcentaje2: '', adicional: '', observaciones: '' 
+    porcentaje1: '', porcentaje2: '',porcentaje3:"", adicional: '', observaciones: '' 
   });
 
   const fetchAranceles = async () => {
@@ -139,7 +139,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           </div>
         </CardHeader>
         
-        <CardContent className="p-0 flex-1 overflow-auto">
+        <CardContent className="p-0">
           {isLoading ? (
              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
           ) : (
