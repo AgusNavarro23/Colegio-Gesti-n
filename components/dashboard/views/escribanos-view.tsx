@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '../dashboard-layout';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, CheckCircle2, ChevronLeft, ChevronRight, UploadCloud, FileText, Printer, Eye, AlertCircle, X, Building2, CreditCard } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, CheckCircle2, ChevronLeft, ChevronRight, UploadCloud, FileText, Printer, Eye, AlertCircle, X, Building2, Calculator, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
@@ -25,7 +25,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 10;
   
   // Estados Base
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,12 +53,17 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [viewingDj, setViewingDj] = useState<any>(null);
   const [isViewDjModalOpen, setIsViewDjModalOpen] = useState(false);
 
+  // Estados para el Modal de Intereses
+  const [isInterestModalOpen, setIsInterestModalOpen] = useState(false);
+  const [interestEntity, setInterestEntity] = useState<any>(null);
+  const [interestDate, setInterestDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedInterestDjs, setSelectedInterestDjs] = useState<Set<string>>(new Set());
+
   const fetchEscribanos = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/escribanos');
-      const data = await res.json();
-      setEscribanos(data);
+      setEscribanos(await res.json());
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los escribanos", variant: "destructive" });
     } finally {
@@ -94,14 +99,13 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // Paso 1: Abrir Modal para pedir Año
+  // --- LÓGICA DE FALTANTES ---
   const handleInitialOpenDjList = (item: any) => {
     setPendingEntity(item);
     setSelectedYear(new Date().getFullYear().toString());
     setIsYearModalOpen(true);
   };
 
-  // Paso 2: Confirmar Año y buscar
   const handleConfirmYear = async () => {
     setIsYearModalOpen(false);
     setEntityName(`Escribano: ${pendingEntity.nombre} - Año ${selectedYear}`);
@@ -111,7 +115,6 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const res = await fetch('/api/declaraciones');
       const data = await res.json();
       setDeclaraciones(data); 
-      // Filtrar por ID del escribano Y el año seleccionado
       const filtered = data.filter((d: any) => d.escribanoId === pendingEntity.id && d.anio === parseInt(selectedYear));
       setSelectedEntityDjs(filtered);
     } catch (error) {
@@ -121,15 +124,9 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     }
   };
 
-  // El cálculo de faltantes ahora analiza el registro completo PERO solo en el año seleccionado
   const getMissingDjs = () => {
     const regId = pendingEntity?.registroId || pendingEntity?.registro?.numero;
-    
-    // Filtramos TODAS las DJ del registro en ese año
-    const djsDelRegistro = regId 
-      ? declaraciones.filter(d => d.registroId === regId && d.anio === parseInt(selectedYear))
-      : selectedEntityDjs;
-
+    const djsDelRegistro = regId ? declaraciones.filter(d => d.registroId === regId && d.anio === parseInt(selectedYear)) : selectedEntityDjs;
     const nums = djsDelRegistro.map(d => parseInt(d.numerodj, 10)).filter(n => !isNaN(n) && n > 0);
     if (nums.length === 0) return [];
     
@@ -142,6 +139,193 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   };
 
   const missingDjs = getMissingDjs();
+
+  // --- LÓGICA DE INTERESES ESCALONADOS ---
+  const handleOpenInterestModal = (item: any) => {
+    setInterestEntity(item);
+    setInterestDate(new Date().toISOString().split('T')[0]);
+    setSelectedInterestDjs(new Set());
+    setIsInterestModalOpen(true);
+  };
+
+  const overdueDjs = useMemo(() => {
+    if (!interestEntity) return [];
+    return declaraciones.filter(dj => {
+      const isOwner = dj.escribanoId === interestEntity.id;
+      
+      const vtoDate = new Date(dj.fecha_vto);
+      vtoDate.setHours(0,0,0,0);
+      
+      // Si está pagada, verificamos si se pagó tarde. Si no está pagada, verificamos según la fecha de cálculo
+      const calcDate = dj.fecha_pago ? new Date(dj.fecha_pago) : new Date(interestDate + 'T00:00:00');
+      calcDate.setHours(0,0,0,0);
+      
+      const isOverdue = calcDate.getTime() > vtoDate.getTime();
+      return isOwner && isOverdue;
+    });
+  }, [declaraciones, interestEntity, interestDate]);
+
+  const toggleInterestDj = (id: string) => {
+    const newSet = new Set(selectedInterestDjs);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedInterestDjs(newSet);
+  };
+
+  const toggleAllInterestDjs = () => {
+    if (selectedInterestDjs.size === overdueDjs.length) setSelectedInterestDjs(new Set());
+    else setSelectedInterestDjs(new Set(overdueDjs.map(dj => dj.id)));
+  };
+
+  const getDjInterestData = (dj: any) => {
+    const baseMonto = (dj.rubroB || 0) + (dj.rubroC || 0) + (dj.rubroD || 0);
+    
+    const vtoDate = new Date(dj.fecha_vto);
+    vtoDate.setHours(0,0,0,0);
+    
+    const calcDate = dj.fecha_pago ? new Date(dj.fecha_pago) : new Date(interestDate + 'T00:00:00');
+    calcDate.setHours(0,0,0,0);
+    
+    const diffTime = calcDate.getTime() - vtoDate.getTime();
+    const daysOverdue = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    
+    let rate = 0;
+    if (daysOverdue > 0 && daysOverdue <= 30) rate = 0.10;
+    else if (daysOverdue >= 31 && daysOverdue <= 60) rate = 0.20;
+    else if (daysOverdue >= 61 && daysOverdue <= 90) rate = 0.30;
+    else if (daysOverdue >= 91 && daysOverdue <= 120) rate = 0.40;
+    else if (daysOverdue > 120) rate = 0.50;
+
+    const interes = baseMonto * rate;
+    
+    return { 
+      baseMonto, 
+      daysOverdue, 
+      interes, 
+      ratePercentage: rate * 100,
+      fechaCalculoUsada: calcDate
+    };
+  };
+
+  // El total a pagar es EXCLUSIVAMENTE la suma de los intereses
+  const totalInteresSeleccionado = overdueDjs
+    .filter(dj => selectedInterestDjs.has(dj.id))
+    .reduce((sum, dj) => sum + getDjInterestData(dj).interes, 0);
+
+  const handlePrintInterestReport = () => {
+    if (selectedInterestDjs.size === 0) {
+      toast({ title: "Atención", description: "Seleccione al menos una DJ para imprimir.", variant: "destructive" });
+      return;
+    }
+
+    const selectedDjsList = overdueDjs.filter(dj => selectedInterestDjs.has(dj.id));
+    let totalIntereses = 0;
+    let totalBase = 0;
+
+    const tableRows = selectedDjsList.map(dj => {
+      const { baseMonto, daysOverdue, interes, ratePercentage, fechaCalculoUsada } = getDjInterestData(dj);
+      totalBase += baseMonto;
+      totalIntereses += interes;
+      
+      const paymentInfo = dj.fecha_pago 
+        ? `<br><small style="color:#16a34a">Pagada el: ${fechaCalculoUsada.toLocaleDateString('es-AR')}</small>`
+        : '';
+      
+      return `
+        <tr>
+          <td><strong>${dj.numerodj}</strong> <br><small>Cód: ${dj.codigodj}</small></td>
+          <td>${new Date(dj.fecha_vto).toLocaleDateString('es-AR')} ${paymentInfo}</td>
+          <td class="text-right">${formatMoney(baseMonto)}</td>
+          <td class="text-center">${daysOverdue} días<br><small>(${ratePercentage}%)</small></td>
+          <td class="text-right font-bold text-orange-600">${formatMoney(interes)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const printContent = `
+      <html>
+        <head>
+          <title>Liquidación de Intereses - ${interestEntity.nombre}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.5; }
+            .header { border-bottom: 2px solid #ea580c; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .header h1 { margin: 0; color: #ea580c; font-size: 24px; }
+            .escribano-info { background: #fff7ed; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffedd5; }
+            .escribano-info h3 { margin-top: 0; color: #9a3412; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid #fdba74; padding-bottom: 8px;}
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px; }
+            th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+            th { background-color: #f3f4f6; font-weight: bold; color: #374151; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+            .text-orange-600 { color: #ea580c; }
+            .summary { width: 350px; float: right; background: #f8fafc; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; }
+            .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
+            .summary-total { font-size: 20px; font-weight: bold; border-top: 2px solid #ea580c; padding-top: 15px; margin-top: 15px; color: #ea580c; }
+            .clear { clear: both; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>Liquidación de Intereses por Mora</h1>
+              <p style="margin: 5px 0 0 0; color: #6b7280;">Emisión del reporte de deuda</p>
+            </div>
+            <div style="text-align: right;">
+              <p style="margin: 0;">Fecha cálculo: <strong>${new Date(interestDate + 'T00:00:00').toLocaleDateString('es-AR')}</strong></p>
+              <p style="margin: 5px 0 0 0;">Tasa Aplicada: <strong>Escala por Tramos (Max 50%)</strong></p>
+            </div>
+          </div>
+          
+          <div class="escribano-info">
+            <h3>Datos del Escribano Titular</h3>
+            <div class="info-grid">
+              <div><strong>Nombre Completo:</strong> ${interestEntity.nombre}</div>
+              <div><strong>Matrícula:</strong> ${interestEntity.matricula}</div>
+              <div><strong>Registro Notarial:</strong> Nº ${interestEntity.registro?.numero || 'Sin asignar'}</div>
+              <div><strong>Condición:</strong> ${interestEntity.condicion}</div>
+            </div>
+          </div>
+
+          <h3 style="margin-bottom: 10px; color: #374151;">Detalle de Declaraciones</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Nº DJ</th>
+                <th>Vencimiento</th>
+                <th class="text-right">Monto Base<br><small>(Rubros B+C+D)</small></th>
+                <th class="text-center">Días Atraso / Tasa</th>
+                <th class="text-right">Total a Pagar<br><small>(Solo Interés)</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div class="summary">
+            <h3 style="margin-top: 0; margin-bottom: 15px; color: #374151;">Resumen de Liquidación</h3>
+            <div class="summary-row"><span style="color: #6b7280;">Declaraciones procesadas:</span> <strong>${selectedDjsList.length}</strong></div>
+            <div class="summary-row"><span style="color: #6b7280;">Total Base Calculado:</span> <strong>${formatMoney(totalBase)}</strong></div>
+            <div class="summary-row summary-total"><span>Total Intereses a Pagar:</span> <span>${formatMoney(totalIntereses)}</span></div>
+          </div>
+          <div class="clear"></div>
+        </body>
+      </html>
+    `;
+    
+    const windowPrint = window.open('', '', 'width=900,height=700');
+    if (windowPrint) {
+      windowPrint.document.write(printContent);
+      windowPrint.document.close();
+      windowPrint.focus();
+      setTimeout(() => {
+        windowPrint.print();
+        windowPrint.close();
+      }, 250);
+    }
+  };
 
   const handlePrintReport = () => {
     const printContent = document.getElementById("informe-declaraciones");
@@ -300,7 +484,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           </div>
         </CardHeader>
         
-        <CardContent className="p-0">
+        <CardContent className="p-0 flex-1 overflow-auto">
           {isLoading ? (
              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
           ) : (
@@ -325,7 +509,9 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                       <TableCell>{item.condicion}</TableCell>
                       <TableCell>{getEstadoBadge(item.estado)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                          {/* Botón que ahora abre Modal de Año */}
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenInterestModal(item)} title="Calcular Intereses por Mora">
+                              <Calculator className="w-4 h-4 text-orange-600" />
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => handleInitialOpenDjList(item)} title="Ver Listado de Declaraciones">
                               <FileText className="w-4 h-4 text-primary" />
                           </Button>
@@ -355,7 +541,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         )}
       </Card>
 
-      {/* MODAL 0: SELECCIONAR AÑO */}
+      {/* MODAL 0: SELECCIONAR AÑO (Para historial) */}
       <Dialog open={isYearModalOpen} onOpenChange={setIsYearModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -367,13 +553,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Año de las Declaraciones</Label>
-              <Input 
-                type="number" 
-                value={selectedYear} 
-                onChange={(e) => setSelectedYear(e.target.value)} 
-                placeholder="Ej. 2025" 
-                className="focus-visible:ring-primary"
-              />
+              <Input type="number" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} placeholder="Ej. 2025" className="focus-visible:ring-primary" />
             </div>
           </div>
           <DialogFooter>
@@ -383,7 +563,108 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL 1: LISTADO DE DECLARACIONES */}
+      {/* NUEVO MODAL: CÁLCULO DE INTERESES POR MORA ESCALONADOS */}
+      <Dialog open={isInterestModalOpen} onOpenChange={setIsInterestModalOpen}>
+        <DialogTitle className="sr-only">Cálculo de Intereses</DialogTitle>
+        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+          
+          <div className="flex justify-between items-center px-6 py-4 border-b bg-orange-600">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2"><Calculator className="w-5 h-5"/> Cálculo de Intereses por Mora</h2>
+            <button onClick={() => setIsInterestModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+            
+            {/* Cabecera de configuración */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6">
+              <div className="space-y-2">
+                <Label>Fecha de Cálculo (Para DJ no pagadas)</Label>
+                <Input type="date" value={interestDate} onChange={e => setInterestDate(e.target.value)} className="focus-visible:ring-orange-600" />
+                <p className="text-[11px] text-gray-500 mt-1">Si la DJ fue pagada fuera de término, se usará su fecha de pago original.</p>
+              </div>
+              <div className="flex flex-col justify-center bg-orange-50/50 p-3 rounded-md border border-orange-100">
+                 <p className="text-sm font-semibold text-orange-800 flex items-center gap-1 mb-1"><Info className="w-4 h-4"/> Escala de Intereses Aplicada</p>
+                 <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs text-orange-900 mt-1">
+                   <span>1 a 30 días: <strong>10%</strong></span>
+                   <span>31 a 60 días: <strong>20%</strong></span>
+                   <span>61 a 90 días: <strong>30%</strong></span>
+                   <span>91 a 120 días: <strong>40%</strong></span>
+                   <span className="col-span-2">Más de 120 días: <strong>50% (Máximo)</strong></span>
+                 </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+              <Table>
+                <TableHeader className="bg-gray-100">
+                  <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <input type="checkbox" className="w-4 h-4 cursor-pointer rounded border-gray-300 accent-orange-600"
+                        checked={overdueDjs.length > 0 && selectedInterestDjs.size === overdueDjs.length}
+                        onChange={toggleAllInterestDjs}
+                      />
+                    </TableHead>
+                    <TableHead>Nº DJ</TableHead>
+                    <TableHead>Vencimiento / Pago</TableHead>
+                    <TableHead className="text-center">Atraso / Tasa</TableHead>
+                    <TableHead className="text-right">Monto Base (B+C+D)</TableHead>
+                    <TableHead className="text-right text-orange-700">Interés a Pagar</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {overdueDjs.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No se encontraron declaraciones con mora para este escribano.</TableCell></TableRow>
+                  ) : (
+                    overdueDjs.map((dj) => {
+                      const { baseMonto, daysOverdue, interes, ratePercentage, fechaCalculoUsada } = getDjInterestData(dj);
+                      return (
+                        <TableRow key={dj.id} className={selectedInterestDjs.has(dj.id) ? "bg-orange-50/50" : ""}>
+                          <TableCell className="text-center">
+                            <input type="checkbox" className="w-4 h-4 cursor-pointer rounded border-gray-300 accent-orange-600"
+                              checked={selectedInterestDjs.has(dj.id)}
+                              onChange={() => toggleInterestDj(dj.id)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium text-gray-900">{dj.numerodj}</TableCell>
+                          <TableCell>
+                            <div className="text-red-600 font-medium">Vto: {new Date(dj.fecha_vto).toLocaleDateString('es-AR')}</div>
+                            {dj.fecha_pago && <div className="text-xs text-green-700 mt-0.5">Pagada: {fechaCalculoUsada.toLocaleDateString('es-AR')}</div>}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="font-medium">{daysOverdue} días</div>
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-[10px] mt-1 hover:bg-orange-100">{ratePercentage}%</Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">{formatMoney(baseMonto)}</TableCell>
+                          <TableCell className="text-right font-bold text-orange-600">{formatMoney(interes)}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          
+          <div className="flex justify-between items-center px-6 py-4 border-t bg-white flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <div className="text-sm font-medium text-gray-600 flex items-center gap-4">
+              <span><span className="text-orange-600 font-bold">{selectedInterestDjs.size}</span> DJ seleccionadas</span>
+              {selectedInterestDjs.size > 0 && (
+                <span className="bg-orange-50 text-orange-800 px-4 py-2 rounded-md border border-orange-200">
+                  Total a Pagar (Solo Intereses): <strong className="text-lg ml-1">{formatMoney(totalInteresSeleccionado)}</strong>
+                </span>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setIsInterestModalOpen(false)}>Cancelar</Button>
+              <Button onClick={handlePrintInterestReport} disabled={selectedInterestDjs.size === 0} className="gap-2 bg-orange-600 hover:bg-orange-700 text-white">
+                <Printer className="w-4 h-4" /> Imprimir Liquidación
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 1: LISTADO DE DECLARACIONES (HISTORIAL Y FALTANTES) */}
       <Dialog open={isDjListModalOpen} onOpenChange={setIsDjListModalOpen}>
         <DialogTitle className="sr-only">Listado de Declaraciones</DialogTitle>
         <DialogContent className="sm:max-w-[95vw] lg:max-w-4xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
@@ -435,7 +716,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
                   {selectedEntityDjs.length > 0 && (
                     <div className="mt-6 bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-start gap-3 missing-box">
-                      <AlertCircle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
+                      <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <h4 className="font-semibold text-orange-800">Análisis de Secuencia (DJ Faltantes Año {selectedYear})</h4>
                         <p className="text-sm text-orange-700 mt-1">
@@ -514,7 +795,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
               {viewingDj.fecha_pago && (
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200 flex justify-between items-center shadow-sm mb-6">
-                  <span className="text-sm text-green-700 font-medium flex items-center gap-2"><CreditCard className="w-4 h-4"/> Fecha de Pago Acreditado</span>
+                  <span className="text-sm text-green-700 font-medium flex items-center gap-2">Fecha de Pago Acreditado</span>
                   <span className="font-bold text-green-800">{new Date(viewingDj.fecha_pago).toLocaleDateString('es-AR')}</span>
                 </div>
               )}
@@ -523,7 +804,8 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 <Table>
                   <TableHeader className="bg-gray-100"><TableRow>
                     <TableHead>Código</TableHead><TableHead>Descripción del Trámite</TableHead>
-                    <TableHead className="text-right">Monto Declarado</TableHead><TableHead className="text-right">Honorario Calc.</TableHead>
+                    <TableHead className="text-right">Monto Declarado</TableHead>
+                    <TableHead className="text-right">Honorario Calc.</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
                     {viewingDj.detalles?.map((d: any, index: number) => (
@@ -555,7 +837,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         </DialogContent>
       </Dialog>
 
-      {/* MODALES EDITAR/CREAR Y CARGA EXCEL ... */}
+      {/* MODALES EDITAR/CREAR Y CARGA EXCEL */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
          <DialogContent>
           <DialogHeader>
