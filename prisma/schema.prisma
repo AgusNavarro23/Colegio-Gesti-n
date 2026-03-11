@@ -76,6 +76,7 @@ model DeclaracionJurada {
   fecha_acto DateTime
   fecha_vto  DateTime
   fecha_pago DateTime?
+  tipo_pago  String @default("Banco")
   anio       Int @default(2026)
   aranceltip Float
   rubroA     Float
@@ -112,4 +113,20 @@ model DetalleDeclaracion {
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model DeclaracionVerificar {
+  id                String   @id @default(cuid())
+  archivoOrigen     String
+  nro_registro      Int
+  cuit_escribano    String
+  nombre_oficial    String   // Nombre extraído de la BD si coincide, o "Desconocido"
+  fecha_acto        String
+  arancel_tip       Float    // Lo que dice el PDF
+  arancel_calculado Float    // Lo que calculó la IA
+  total_general     Float
+  prioridad         String   @default("BAJA") // ALTA, BAJA
+  motivos_riesgo    String?  // Mensajes de error súper detallados
+  estado            String   @default("PENDIENTE_REVISION") // PENDIENTE_REVISION, APROBADA, RECHAZADA
+  createdAt         DateTime @default(now())
 }

@@ -34,7 +34,7 @@ export function DashboardLayout({ children, role, title }: DashboardLayoutProps)
 
   // Definimos las rutas del Empleado
   const employeeMenu = [
-    { icon: FileText, label: 'Solicitudes', href: '/employee' },
+    { icon: FileText, label: 'Dashboard', href: '/employee/dashboard' },
     { icon: Users, label: 'Escribanos', href: '/employee/escribanos' },
     { icon: BookOpen, label: 'Registros', href: '/employee/registros' },
     { icon: FileText, label: 'Declaraciones', href: '/employee/declaraciones' },
