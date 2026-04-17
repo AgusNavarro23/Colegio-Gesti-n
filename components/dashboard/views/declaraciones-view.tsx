@@ -560,8 +560,8 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL REPORTE DIARIO DE RECAUDACIÓN */}
       <Dialog open={isDailyReportModalOpen} onOpenChange={setIsDailyReportModalOpen}>
         <DialogTitle className="sr-only">Reporte Diario</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
-          
+                  <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+
           <div className="flex justify-between items-center px-6 py-4 border-b bg-blue-600">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2"><CalendarDays className="w-5 h-5"/> Reporte Diario de Recaudación</h2>
             <button onClick={() => setIsDailyReportModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
