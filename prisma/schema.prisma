@@ -1,15 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,45 +13,74 @@ model User {
   email     String   @unique
   name      String?
   password  String
-  // CAMBIO 1: De Role a String (y el default entre comillas)
-  role      String   @default("CLIENT") 
+  role      String   @default("CLIENT")
+  resetToken String?
+  resetTokenExpiry DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
 
+  createdById String?
+  createdBy   User?    @relation("UserCreatedBy", fields: [createdById], references: [id])
+  usersCreated User[]  @relation("UserCreatedBy")
+
+  escribanosCreados      Escribano[]           @relation("EscribanoCreatedBy")
+  escribanosActualizados Escribano[]           @relation("EscribanoUpdatedBy")
+  registrosCreados       Registro[]            @relation("RegistroCreatedBy")
+  registrosActualizados  Registro[]            @relation("RegistroUpdatedBy")
+  arancelesCreados       Arancel[]             @relation("ArancelCreatedBy")
+  arancelesActualizados  Arancel[]             @relation("ArancelUpdatedBy")
+  declaracionesCreadas       DeclaracionJurada[] @relation("DeclaracionJuradaCreatedBy")
+  declaracionesActualizadas  DeclaracionJurada[] @relation("DeclaracionJuradaUpdatedBy")
+  verificacionesCreadas      DeclaracionVerificar[] @relation("VerificacionCreatedBy")
+  verificacionesActualizadas DeclaracionVerificar[] @relation("VerificacionUpdatedBy")
+  configuracionesCreadas      ConfiguracionAporte[] @relation("ConfiguracionAporteCreatedBy")
+  configuracionesActualizadas ConfiguracionAporte[] @relation("ConfiguracionAporteUpdatedBy")
+}
 
 model Escribano {
   id        String   @id @default(cuid())
   nombre    String
   matricula String   @unique
   dni       String   @unique
-  // Controlado en Front: "Activo", "Licencia", "Jubilado"
-  estado    String   @default("Activo") 
-  // Controlado en Front: "Titular", "Adjunto"
+  cuit      String?
+  fechaHabilitacion DateTime?
+  estado    String   @default("Activo")
   condicion String   @default("Titular")
-  registroId String? 
+  categoria String   @default("D")
+  registroId String?
   registro Registro? @relation(fields: [registroId], references: [numero])
   declaraciones DeclaracionJurada[]
+  verificaciones DeclaracionVerificar[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?  @relation("EscribanoCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("EscribanoUpdatedBy", fields: [updatedById], references: [id])
 }
 
 model Registro {
   id        String   @id @default(cuid())
   numero    String   @unique
   direccion String
-  localidad String 
-  // Controlado en Front: "Activo", "Inactivo"
+  localidad String
   escribanos  Escribano[]
-  estado    String   @default("Activo") 
+  estado    String   @default("Activo")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   declaraciones DeclaracionJurada[]
+  verificaciones DeclaracionVerificar[]
+
+  createdById String?
+  createdBy   User?  @relation("RegistroCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("RegistroUpdatedBy", fields: [updatedById], references: [id])
 }
 
 model Arancel {
   id String @id @default(cuid())
-  codigoRenta String 
+  codigoRenta String
   descripcion String
   minimo Float
   maximo Float
@@ -64,14 +88,20 @@ model Arancel {
   porcentaje2 Float
   porcentaje3 Float
   adicional Float
-  detalles      DetalleDeclaracion[] // Relación con detalles de DJ
+  observaciones String?
+  detalles      DetalleDeclaracion[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?  @relation("ArancelCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("ArancelUpdatedBy", fields: [updatedById], references: [id])
 }
 
 model DeclaracionJurada {
   id         String   @id @default(cuid())
-  numerodj   String   
+  numerodj   String
   codigodj   String
   fecha_acto DateTime
   fecha_vto  DateTime
@@ -85,7 +115,6 @@ model DeclaracionJurada {
   rubroD     Float
   total      Float
 
-  // Nuevas relaciones
   registroId  String
   registro    Registro @relation(fields: [registroId], references: [numero])
 
@@ -98,12 +127,17 @@ model DeclaracionJurada {
   updatedAt  DateTime @updatedAt
 
   @@unique([numerodj, registroId, anio])
+
+  createdById String?
+  createdBy   User?  @relation("DeclaracionJuradaCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("DeclaracionJuradaUpdatedBy", fields: [updatedById], references: [id])
 }
 
 model DetalleDeclaracion {
   id                  String   @id @default(cuid())
-  monto               Float    
-  arancelCalculado    Float    
+  monto               Float
+  arancelCalculado    Float
 
   declaracionJuradaId String
   declaracionJurada   DeclaracionJurada @relation(fields: [declaracionJuradaId], references: [id], onDelete: Cascade)
@@ -120,13 +154,54 @@ model DeclaracionVerificar {
   archivoOrigen     String
   nro_registro      Int
   cuit_escribano    String
-  nombre_oficial    String   // Nombre extraído de la BD si coincide, o "Desconocido"
+  nombre_oficial    String
   fecha_acto        String
-  arancel_tip       Float    // Lo que dice el PDF
-  arancel_calculado Float    // Lo que calculó la IA
+  fecha_vto         String?
+  tipo_pago         String   @default("Banco")
+  anio              Int      @default(2026)
+  nro_escritura     Int      @default(0)
+  codigo_dj         Int      @default(0)
+  arancel_tip       Float
+  arancel_calculado Float
   total_general     Float
-  prioridad         String   @default("BAJA") // ALTA, BAJA
-  motivos_riesgo    String?  // Mensajes de error súper detallados
-  estado            String   @default("PENDIENTE_REVISION") // PENDIENTE_REVISION, APROBADA, RECHAZADA
+  rubroA            Float    @default(0)
+  rubroB            Float    @default(0)
+  rubroC            Float    @default(0)
+  rubroD            Float    @default(0)
+  prioridad         String   @default("BAJA")
+  nivelRiesgo       String   @default("VERDE")
+  motivos_riesgo    String?
+  estado            String   @default("PENDIENTE_REVISION")
+  actos_resumen     String?
+  detalles_arancel  String?
+  pdfPath           String?
   createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  registroId  String?
+  escribanoId String?
+  registro    Registro?  @relation(fields: [registroId], references: [numero])
+  escribano   Escribano? @relation(fields: [escribanoId], references: [id])
+
+  createdById String?
+  createdBy   User?  @relation("VerificacionCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("VerificacionUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model ConfiguracionAporte {
+  id           String   @id @default(cuid())
+  fechaInicio  DateTime
+  fechaFin     DateTime
+  montoA       Float
+  montoB       Float
+  montoC       Float
+  montoD       Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?  @relation("ConfiguracionAporteCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?  @relation("ConfiguracionAporteUpdatedBy", fields: [updatedById], references: [id])
 }

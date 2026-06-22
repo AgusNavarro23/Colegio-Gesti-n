@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
-import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, CheckCircle2, ChevronLeft, ChevronRight, UploadCloud, FileText, Printer, Eye, AlertCircle, X, Building2, Calculator, Info } from 'lucide-react';
+import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
+import Swal from 'sweetalert2';
+import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, CheckCircle2, UploadCloud, FileText, Printer, Eye, AlertCircle, X, Building2, Calculator, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
@@ -35,7 +36,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
-    nombre: '', matricula: '', condicion: 'Titular', estado: 'Activo', registroId: ''
+    nombre: '', matricula: '', condicion: 'Titular', estado: 'Activo', registroId: '', categoria: 'D'
   });
 
   // Estados para Modal de Selección de Año
@@ -63,9 +64,10 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setIsLoading(true);
     try {
       const res = await fetch('/api/escribanos');
-      setEscribanos(await res.json());
+      const data = await res.json();
+      setEscribanos(Array.isArray(data) ? data : []);
     } catch (error) {
-      toast({ title: "Error", description: "No se pudieron cargar los escribanos", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los escribanos', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +76,8 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const fetchRegistros = async () => {
     try {
       const res = await fetch('/api/registros');
-      setRegistros(await res.json());
+      const data = await res.json();
+      setRegistros(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error al cargar registros", error);
     }
@@ -83,7 +86,8 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const fetchDeclaraciones = async () => {
     try {
       const res = await fetch('/api/declaraciones');
-      setDeclaraciones(await res.json());
+      const data = await res.json();
+      setDeclaraciones(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error al cargar declaraciones", error);
     }
@@ -114,11 +118,12 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     try {
       const res = await fetch('/api/declaraciones');
       const data = await res.json();
-      setDeclaraciones(data); 
-      const filtered = data.filter((d: any) => d.escribanoId === pendingEntity.id && d.anio === parseInt(selectedYear));
+      const djArray = Array.isArray(data) ? data : [];
+      setDeclaraciones(djArray); 
+      const filtered = djArray.filter((d: any) => d.escribanoId === pendingEntity.id && d.anio === parseInt(selectedYear));
       setSelectedEntityDjs(filtered);
     } catch (error) {
-      toast({ title: "Error", description: "Error al cargar las declaraciones", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Error al cargar las declaraciones', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setDjsLoading(false);
     }
@@ -214,7 +219,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const handlePrintInterestReport = () => {
     if (selectedInterestDjs.size === 0) {
-      toast({ title: "Atención", description: "Seleccione al menos una DJ para imprimir.", variant: "destructive" });
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Seleccione al menos una DJ para imprimir.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       return;
     }
 
@@ -362,10 +367,10 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setEditingItem(item);
     if (item) {
       const regId = item.registro ? item.registro.numero : '';
-      setFormData({ nombre: item.nombre, matricula: item.matricula, condicion: item.condicion, estado: item.estado, registroId: regId });
+      setFormData({ nombre: item.nombre, matricula: item.matricula, condicion: item.condicion, estado: item.estado, registroId: regId, categoria: item.categoria || 'D' });
       setRegistroSearch(regId);
     } else {
-      setFormData({ nombre: '', matricula: '', condicion: 'Titular', estado: 'Activo', registroId: '' });
+      setFormData({ nombre: '', matricula: '', condicion: 'Titular', estado: 'Activo', registroId: '', categoria: 'D' });
       setRegistroSearch('');
     }
     setIsModalOpen(true);
@@ -379,24 +384,34 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const res = await fetch('/api/escribanos', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
-      toast({ title: "Éxito", description: editingItem ? "Escribano actualizado" : "Escribano creado" });
+      Swal.fire({ icon: 'success', title: 'Éxito', text: editingItem ? 'Escribano actualizado' : 'Escribano creado', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsModalOpen(false); fetchEscribanos();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message, confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este escribano?')) return;
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: '¿Estás seguro de eliminar este escribano?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    });
+    if (!result.isConfirmed) return;
     try {
       const res = await fetch(`/api/escribanos?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error al eliminar');
-      toast({ title: "Eliminado", description: "Registro eliminado correctamente" });
+      Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Registro eliminado correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       fetchEscribanos();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo eliminar", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo eliminar', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     }
   };
 
@@ -430,16 +445,16 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         }).filter(esc => esc.matricula !== ''); 
 
         if (formattedData.length === 0) {
-          toast({ title: "Error", description: "No se encontraron datos válidos.", variant: "destructive" }); setIsUploading(false); return;
+          Swal.fire({ icon: 'error', title: 'Error', text: 'No se encontraron datos válidos.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false }); setIsUploading(false); return;
         }
 
         const res = await fetch('/api/escribanos/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formattedData) });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || 'Error al importar');
-        toast({ title: "Importación Finalizada", description: `Agregados ${result.agregados}. Omitidos ${result.omitidos}.` });
+        Swal.fire({ icon: 'success', title: 'Importación Finalizada', text: `Agregados ${result.agregados}. Omitidos ${result.omitidos}.`, timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
         setIsUploadModalOpen(false); fetchEscribanos();
       } catch (error: any) {
-        toast({ title: "Error", description: error.message || "Error", variant: "destructive" });
+        Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'Error', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       } finally { setIsUploading(false); e.target.value = ''; }
     };
     reader.readAsArrayBuffer(file);
@@ -464,20 +479,19 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-  const totalPages = Math.max(1, Math.ceil(filteredEscribanos.length / itemsPerPage));
   const currentEscribanos = filteredEscribanos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <DashboardLayout role={role} title="Gestión de Escribanos">
-      <Card className="border-0 shadow-sm flex flex-col h-[calc(100vh-12rem)]">
-        <CardHeader className="px-6 py-4 border-b border-gray-100 flex-none">
+      <Card className="border-0 shadow-sm flex flex-col min-h-[60vh] lg:h-[calc(100vh-12rem)]">
+        <CardHeader className="px-4 sm:px-6 py-4 border-b border-gray-100 flex-none">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
               <Input placeholder="Buscar por nombre o matrícula..." className="pl-9 focus-visible:ring-primary" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-                <Button variant="outline" size="icon" onClick={fetchEscribanos} title="Recargar"><RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></Button>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="icon" className="shrink-0" onClick={fetchEscribanos} title="Recargar"><RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></Button>
                 <Button variant="secondary" onClick={() => setIsUploadModalOpen(true)} className="gap-2 bg-primary/10 text-primary hover:bg-primary/20 w-full sm:w-auto"><UploadCloud className="w-4 h-4" /> Importar Excel</Button>
                 <Button onClick={() => handleOpenModal()} className="gap-2 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto"><Plus className="w-4 h-4" /> Nuevo</Button>
             </div>
@@ -495,6 +509,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                       <TableHead>Nombre</TableHead>
                       <TableHead>Matrícula</TableHead>
                       <TableHead>Registro</TableHead>
+                      <TableHead>Categoría</TableHead>
                       <TableHead>Condición</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -506,6 +521,16 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                       <TableCell className="font-medium">{item.nombre}</TableCell>
                       <TableCell>{item.matricula}</TableCell>
                       <TableCell>{item.registro ? <Badge variant="outline" className="font-mono bg-white">{item.registro.numero}</Badge> : <span className="text-gray-400 text-xs">Sin asignar</span>}</TableCell>
+                      <TableCell>
+                        <Badge className={
+                          item.categoria === 'A' ? 'bg-green-100 text-green-800 border-green-200' :
+                          item.categoria === 'B' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                          item.categoria === 'C' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                          'bg-red-100 text-red-800 border-red-200'
+                        }>
+                          {item.categoria || 'D'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{item.condicion}</TableCell>
                       <TableCell>{getEstadoBadge(item.estado)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
@@ -521,7 +546,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                       </TableRow>
                   ))}
                   {currentEscribanos.length === 0 && (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No se encontraron datos</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No se encontraron datos</TableCell></TableRow>
                   )}
                   </TableBody>
               </Table>
@@ -530,14 +555,12 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         </CardContent>
 
         {!isLoading && filteredEscribanos.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-b-xl flex-none">
-            <span className="text-sm text-gray-500">Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredEscribanos.length)} de {filteredEscribanos.length}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Anterior</span></Button>
-              <span className="text-sm font-medium mx-2 whitespace-nowrap">Página {currentPage} de {totalPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}><span className="hidden sm:inline">Siguiente</span> <ChevronRight className="w-4 h-4 sm:ml-1" /></Button>
-            </div>
-          </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={filteredEscribanos.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </Card>
 
@@ -566,14 +589,14 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* NUEVO MODAL: CÁLCULO DE INTERESES POR MORA ESCALONADOS */}
       <Dialog open={isInterestModalOpen} onOpenChange={setIsInterestModalOpen}>
         <DialogTitle className="sr-only">Cálculo de Intereses</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-orange-600">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2"><Calculator className="w-5 h-5"/> Cálculo de Intereses por Mora</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-orange-600">
+            <h2 className="text-base sm:text-xl font-semibold text-white flex items-center gap-2"><Calculator className="w-5 h-5"/> Cálculo de Intereses por Mora</h2>
             <button onClick={() => setIsInterestModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
             
             {/* Cabecera de configuración */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6">
@@ -645,7 +668,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             </div>
           </div>
           
-          <div className="flex justify-between items-center px-6 py-4 border-t bg-white flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-4 sm:px-6 py-4 border-t bg-white flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
             <div className="text-sm font-medium text-gray-600 flex items-center gap-4">
               <span><span className="text-orange-600 font-bold">{selectedInterestDjs.size}</span> DJ seleccionadas</span>
               {selectedInterestDjs.size > 0 && (
@@ -654,9 +677,9 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 </span>
               )}
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setIsInterestModalOpen(false)}>Cancelar</Button>
-              <Button onClick={handlePrintInterestReport} disabled={selectedInterestDjs.size === 0} className="gap-2 bg-orange-600 hover:bg-orange-700 text-white">
+            <div className="flex w-full sm:w-auto flex-col-reverse sm:flex-row gap-3">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsInterestModalOpen(false)}>Cancelar</Button>
+              <Button onClick={handlePrintInterestReport} disabled={selectedInterestDjs.size === 0} className="w-full sm:w-auto gap-2 bg-orange-600 hover:bg-orange-700 text-white">
                 <Printer className="w-4 h-4" /> Imprimir Liquidación
               </Button>
             </div>
@@ -667,13 +690,13 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL 1: LISTADO DE DECLARACIONES (HISTORIAL Y FALTANTES) */}
       <Dialog open={isDjListModalOpen} onOpenChange={setIsDjListModalOpen}>
         <DialogTitle className="sr-only">Listado de Declaraciones</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-4xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-primary" /> Historial de Declaraciones</h2>
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-4xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-gray-50">
+            <h2 className="text-base sm:text-xl font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-primary" /> Historial de Declaraciones</h2>
             <button onClick={() => setIsDjListModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
             {djsLoading ? (
               <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>
             ) : (
@@ -703,7 +726,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                               <TableCell className="text-right whitespace-nowrap no-print">
                                 <Button variant="ghost" size="icon" onClick={() => { setViewingDj(dj); setIsViewDjModalOpen(true); }} title="Ver Detalle"><Eye className="w-4 h-4 text-gray-500" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => {
-                                  toast({ title: "Redirigiendo", description: "Abriendo el módulo de Declaraciones para edición..." });
+                                  Swal.fire({ icon: 'info', title: 'Redirigiendo', text: 'Abriendo el módulo de Declaraciones para edición...', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
                                   router.push(`/${role.toLowerCase()}/declaraciones?escribanoId=${dj.escribanoId}`);
                                 }} title="Editar DJ"><Edit className="w-4 h-4 text-blue-600" /></Button>
                               </TableCell>
@@ -732,9 +755,9 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             )}
           </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-white flex-none">
-            <Button variant="outline" onClick={() => setIsDjListModalOpen(false)}>Cerrar</Button>
-            <Button onClick={handlePrintReport} disabled={djsLoading || selectedEntityDjs.length === 0} className="gap-2 bg-primary text-white hover:bg-primary/90">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t bg-white flex-none">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDjListModalOpen(false)}>Cerrar</Button>
+            <Button onClick={handlePrintReport} disabled={djsLoading || selectedEntityDjs.length === 0} className="w-full sm:w-auto gap-2 bg-primary text-white hover:bg-primary/90">
               <Printer className="w-4 h-4" /> Imprimir Informe
             </Button>
           </div>
@@ -744,17 +767,17 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL 2: VER DJ INDIVIDUAL (DISEÑO PREMIUM) */}
       <Dialog open={isViewDjModalOpen} onOpenChange={setIsViewDjModalOpen}>
         <DialogTitle className="sr-only">Ver Declaración Jurada</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
-            <h2 className="text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-gray-50">
+            <h2 className="text-lg sm:text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
             <button onClick={() => setIsViewDjModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {viewingDj && (
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <Card className="shadow-sm border-gray-200 col-span-2"><CardContent className="p-5">
                   <div className="flex items-start gap-4">
@@ -782,7 +805,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 </CardContent></Card>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
                   <span className="text-sm text-gray-500 font-medium">Fecha de Acto</span>
                   <span className="font-semibold text-gray-900">{new Date(viewingDj.fecha_acto).toLocaleDateString('es-AR')}</span>
@@ -845,7 +868,7 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             <DialogDescription>Completa los datos a continuación.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div className="space-y-2"><Label>Nombre Completo</Label><Input value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} /></div>
                <div className="space-y-2"><Label>Matrícula</Label><Input value={formData.matricula} onChange={(e) => setFormData({...formData, matricula: e.target.value})} /></div>
             </div>
@@ -865,12 +888,15 @@ export function EscribanosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Condición</Label><Select value={formData.condicion} onValueChange={(val) => setFormData({...formData, condicion: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Titular">Titular</SelectItem><SelectItem value="Adjunto">Adjunto</SelectItem></SelectContent></Select>
               </div>
               <div className="space-y-2">
                 <Label>Estado</Label><Select value={formData.estado} onValueChange={(val) => setFormData({...formData, estado: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Activo">Activo</SelectItem><SelectItem value="Licencia">Licencia</SelectItem><SelectItem value="Jubilado">Jubilado</SelectItem></SelectContent></Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Categoría</Label><Select value={formData.categoria} onValueChange={(val) => setFormData({...formData, categoria: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="A">A</SelectItem><SelectItem value="B">B</SelectItem><SelectItem value="C">C</SelectItem><SelectItem value="D">D</SelectItem></SelectContent></Select>
               </div>
             </div>
             <DialogFooter className="mt-4">

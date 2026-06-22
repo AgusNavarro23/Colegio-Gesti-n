@@ -1,7 +1,5 @@
-'use client'
-
-import { EmployeeDashboard } from "@/components/dashboard/employee-dashboard"
+import { redirect } from 'next/navigation';
 
 export default function EmployeePage() {
-  return <EmployeeDashboard />
+  redirect('/employee/dashboard');
 }

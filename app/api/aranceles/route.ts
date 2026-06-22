@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getUserFromRequest } from '@/lib/get-user';
 
 const prisma = new PrismaClient();
 
 export async function GET() {
   try {
     const aranceles = await prisma.arancel.findMany({
-      orderBy: { codigoRenta: 'asc' }, // Ordenamos por código
+      orderBy: { codigoRenta: 'asc' },
     });
     return NextResponse.json(aranceles);
   } catch (error) {
@@ -14,15 +15,15 @@ export async function GET() {
   }
 }
 
-// Función auxiliar para parsear números o devolver 0 si está vacío
 const parseNumber = (val: any) => {
   if (val === '' || val === null || val === undefined) return 0;
   const parsed = parseFloat(val);
   return isNaN(parsed) ? 0 : parsed;
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
     const { codigo, descripcion, minimo, maximo, porcentaje1, porcentaje2,porcentaje3, adicional, observaciones } = body;
 
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
         porcentaje2: parseNumber(porcentaje2),
         porcentaje3: parseNumber(porcentaje3),
         adicional: parseNumber(adicional),
+        createdById: user?.userId ?? null,
       },
     });
 
@@ -50,8 +52,9 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
     const { id, codigo, descripcion, minimo, maximo, porcentaje1, porcentaje2,porcentaje3, adicional, observaciones } = body;
 
@@ -68,6 +71,7 @@ export async function PUT(request: Request) {
         porcentaje2: parseNumber(porcentaje2),
         porcentaje3: parseNumber(porcentaje3),
         adicional: parseNumber(adicional),
+        updatedById: user?.userId ?? null,
       },
     });
 

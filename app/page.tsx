@@ -14,10 +14,10 @@ export default function HomePage() {
     if (isAuthenticated && user) {
       switch (user.role) {
         case 'ADMIN':
-          router.push('/admin');
+          router.push('/admin/comando');
           break;
         case 'EMPLOYEE':
-          router.push('/employee');
+          router.push('/employee/auditoria');
           break;
         case 'CLIENT':
         default:

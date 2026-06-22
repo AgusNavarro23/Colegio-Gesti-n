@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea'; // Asegúrate de tener este componente
-import { toast } from '@/hooks/use-toast';
+import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
+import Swal from 'sweetalert2';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw } from 'lucide-react';
 
 export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [aranceles, setAranceles] = useState<any[]>([]);
@@ -20,7 +21,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 10;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -39,7 +40,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const data = await res.json();
       setAranceles(data);
     } catch (error) {
-      toast({ title: "Error", description: "Error cargando aranceles", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Error cargando aranceles', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsLoading(false);
     }
@@ -81,25 +82,35 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
-      toast({ title: "Éxito", description: "Arancel guardado correctamente" });
+      Swal.fire({ icon: 'success', title: 'Éxito', text: 'Arancel guardado correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsModalOpen(false);
       fetchAranceles();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message, confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Seguro que deseas eliminar este arancel?')) return;
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: '¿Seguro que deseas eliminar este arancel?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    });
+    if (!result.isConfirmed) return;
     try {
       const res = await fetch(`/api/aranceles?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error al eliminar');
-      toast({ title: "Eliminado", description: "Arancel eliminado" });
+      Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Arancel eliminado', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       fetchAranceles();
     } catch (error: any) {
-      toast({ title: "Error", description: "No se pudo eliminar", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo eliminar', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     }
   };
 
@@ -108,7 +119,6 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     (a.codigoRenta && a.codigoRenta.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const totalPages = Math.max(1, Math.ceil(filteredAranceles.length / itemsPerPage));
   const currentAranceles = filteredAranceles.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Helper para formatear moneda
@@ -125,98 +135,92 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   return (
     <DashboardLayout role={role} title="Gestión de Aranceles">
-      <Card className="border-0 shadow-sm flex flex-col h-[calc(100vh-12rem)]">
-        <CardHeader className="px-6 py-4 border-b border-gray-100 flex-none">
+      <Card className="border-0 shadow-sm flex flex-col min-h-[60vh] lg:h-[calc(100vh-12rem)]">
+        <CardHeader className="px-4 sm:px-6 py-4 border-b border-gray-100 flex-none">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
               <Input placeholder="Buscar por código o descripción..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-                <Button variant="outline" size="icon" onClick={fetchAranceles}><RefreshCcw className="w-4 h-4" /></Button>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="icon" className="shrink-0" onClick={fetchAranceles}><RefreshCcw className="w-4 h-4" /></Button>
                 <Button onClick={() => handleOpenModal()} className="gap-2 w-full sm:w-auto"><Plus className="w-4 h-4" /> Nuevo Arancel</Button>
             </div>
           </div>
         </CardHeader>
         
-        <CardContent className="p-0">
+        <CardContent className="p-0 flex-1 overflow-auto">
           {isLoading ? (
              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50/50">
-                  <TableHead className="w-20">Código</TableHead>
-                  <TableHead className="min-w-50">Descripción</TableHead>
-                  <TableHead>Mínimo</TableHead>
-                  <TableHead>Máximo</TableHead>
-                  <TableHead>Base / Exc.</TableHead>
-                  <TableHead>Adicional</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentAranceles.map(item => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium"><Badge variant="outline">{item.codigoRenta}</Badge></TableCell>
-                    <TableCell className="text-gray-900">
-                      <div className="font-medium">{item.descripcion}</div>
-                      {item.observaciones && <div className="text-xs text-gray-500 line-clamp-1">{item.observaciones}</div>}
-                    </TableCell>
-                    <TableCell className="text-gray-600">{formatMoney(item.minimo)}</TableCell>
-                    <TableCell className="text-gray-600">{formatMoney(item.maximo)}</TableCell>
-                    <TableCell className="text-gray-600">
-                      <div className="flex flex-col text-xs">
-                        {item.porcentaje1 !== null && <span>Base: {formatPercent(item.porcentaje1)}</span>}
-                        {item.porcentaje2 !== null && <span className="text-orange-600">Exc: {formatPercent(item.porcentaje2)}</span>}
-                        {item.porcentaje3 !== null && <span className="text-green-600">Adic: {formatPercent(item.porcentaje3)}</span>}
-                        {item.porcentaje1 === null && item.porcentaje2 === null && item.porcentaje3 === null && '-'}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-gray-600">{formatMoney(item.adicional)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4 text-blue-600" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50/50">
+                    <TableHead className="w-20">Código</TableHead>
+                    <TableHead className="min-w-50">Descripción</TableHead>
+                    <TableHead>Mínimo</TableHead>
+                    <TableHead>Máximo</TableHead>
+                    <TableHead>Base / Exc.</TableHead>
+                    <TableHead>Adicional</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
-                ))}
-                {currentAranceles.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No se encontraron aranceles</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {currentAranceles.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium"><Badge variant="outline">{item.codigoRenta}</Badge></TableCell>
+                      <TableCell className="text-gray-900">
+                        <div className="font-medium">{item.descripcion}</div>
+                        {item.observaciones && <div className="text-xs text-gray-500 line-clamp-1">{item.observaciones}</div>}
+                      </TableCell>
+                      <TableCell className="text-gray-600">{formatMoney(item.minimo)}</TableCell>
+                      <TableCell className="text-gray-600">{formatMoney(item.maximo)}</TableCell>
+                      <TableCell className="text-gray-600">
+                        <div className="flex flex-col text-xs">
+                          {item.porcentaje1 !== null && <span>Base: {formatPercent(item.porcentaje1)}</span>}
+                          {item.porcentaje2 !== null && <span className="text-orange-600">Exc: {formatPercent(item.porcentaje2)}</span>}
+                          {item.porcentaje3 !== null && <span className="text-green-600">Adic: {formatPercent(item.porcentaje3)}</span>}
+                          {item.porcentaje1 === null && item.porcentaje2 === null && item.porcentaje3 === null && '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-gray-600">{formatMoney(item.adicional)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {currentAranceles.length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No se encontraron aranceles</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
 
         {/* CONTROLES DE PAGINACIÓN */}
         {!isLoading && filteredAranceles.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between flex-none rounded-b-xl">
-            <span className="text-sm text-gray-500">
-              Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredAranceles.length)} de {filteredAranceles.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
-              </Button>
-              <span className="text-sm font-medium mx-2">Página {currentPage} de {totalPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                Siguiente <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={filteredAranceles.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </Card>
 
       {/* MODAL AMPLIADO */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Editar Arancel' : 'Nuevo Arancel'}</DialogTitle>
             <DialogDescription>Configura los parámetros de cálculo para este trámite.</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 pt-4">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="col-span-1 space-y-2">
                 <Label>Código *</Label>
                 <Input value={formData.codigo} onChange={(e) => setFormData({...formData, codigo: e.target.value})} placeholder="Ej. 1.A" />
@@ -227,7 +231,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
               <div className="space-y-2">
                 <Label>Monto Mínimo ($)</Label>
                 <Input type="number" step="0.01" value={formData.minimo} onChange={(e) => setFormData({...formData, minimo: e.target.value})} placeholder="0.00" />
@@ -238,7 +242,7 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Porcentaje Base (%)</Label>
                 <Input type="number" step="0.01" value={formData.porcentaje1} onChange={(e) => setFormData({...formData, porcentaje1: e.target.value})} placeholder="Ej. 2.5" />

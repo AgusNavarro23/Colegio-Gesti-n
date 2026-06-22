@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getUserFromRequest } from '@/lib/get-user';
 
 const prisma = new PrismaClient();
 
@@ -19,8 +20,9 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
     const { numerodj, codigodj, fecha_acto, fecha_vto, registroId, escribanoId, aranceltip, rubroA, rubroB, rubroC, rubroD, total, detalles } = body;
 
@@ -28,14 +30,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltan campos obligatorios o detalles' }, { status: 400 });
     }
 
-    // EXTRAEMOS EL AÑO DE LA FECHA DE ACTO
     const anio = new Date(fecha_acto).getFullYear();
 
     const nuevaDJ = await prisma.declaracionJurada.create({
       data: {
-        numerodj, codigodj, anio, // <--- GUARDAMOS EL AÑO AQUÍ
+        numerodj, codigodj, anio,
         fecha_acto: new Date(fecha_acto), fecha_vto: new Date(fecha_vto),
         registroId, escribanoId, aranceltip, rubroA, rubroB, rubroC, rubroD, total,
+        createdById: user?.userId ?? null,
         detalles: {
           create: detalles.map((d: any) => ({
             monto: d.monto, arancelCalculado: d.arancelCalculado, arancelId: d.arancelId
@@ -52,21 +54,23 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
     const { id, numerodj, codigodj, fecha_acto, fecha_vto, registroId, escribanoId, aranceltip, rubroA, rubroB, rubroC, rubroD, total, detalles } = body;
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
-    const anio = new Date(fecha_acto).getFullYear(); // <--- EXTRAEMOS EL AÑO
+    const anio = new Date(fecha_acto).getFullYear();
 
     const actualizado = await prisma.declaracionJurada.update({
       where: { id },
       data: {
-        numerodj, codigodj, anio, // <--- GUARDAMOS EL AÑO AQUÍ
+        numerodj, codigodj, anio,
         fecha_acto: new Date(fecha_acto), fecha_vto: new Date(fecha_vto),
         registroId, escribanoId, aranceltip, rubroA, rubroB, rubroC, rubroD, total,
+        updatedById: user?.userId ?? null,
         detalles: {
           deleteMany: {},
           create: detalles.map((d: any) => ({
@@ -84,7 +88,6 @@ export async function PUT(request: Request) {
   }
 }
 
-// NUEVO: Método para ELIMINAR
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -99,8 +102,9 @@ export async function DELETE(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
     const { djIds, fecha_pago } = body;
 
@@ -108,17 +112,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Datos incompletos para procesar el pago' }, { status: 400 });
     }
 
-    // Actualizamos todas las DJs seleccionadas asignándoles la fecha de pago
     const actualizados = await prisma.declaracionJurada.updateMany({
       where: {
         id: { in: djIds }
       },
       data: {
-        fecha_pago: new Date(fecha_pago)
+        fecha_pago: new Date(fecha_pago),
+        updatedById: user?.userId ?? null,
       }
-    });
-
-    return NextResponse.json({ message: 'Declaraciones marcadas como pagadas', count: actualizados.count });
+    });({ message: 'Declaraciones marcadas como pagadas', count: actualizados.count });
   } catch (error) {
     return NextResponse.json({ error: 'Error al procesar el pago' }, { status: 500 });
   }

@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
-import { Search, Plus, Minus, Trash2, Loader2, RefreshCcw, User, CheckCircle2, X, Edit, Eye, FilterX, CreditCard, Building2, Printer, CalendarDays } from 'lucide-react';
+import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
+import Swal from 'sweetalert2';
+import { Search, Plus, Minus, Trash2, Loader2, RefreshCcw, User, CheckCircle2, X, Edit, Eye, FilterX, CreditCard, Building2, Printer, CalendarDays, Download } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { feriados } from '@/lib/feriados';
+import * as XLSX from 'xlsx';
 
 const addBusinessDays = (startDate: Date, daysToAdd: number) => {
   let currentDate = new Date(startDate);
@@ -76,8 +78,7 @@ const calcularHonorario = (monto: number, arancel: any, cantidadAdicionales: num
 
   // 3. Lógica de Adicionales
   if (cantidadAdicionales > 0) {
-    const extraPorAdicional = (arancel.adicional * cantidadAdicionales || 0);
-    honorario += (arancel.monto || 0) + extraPorAdicional;
+    honorario += arancel.adicional * cantidadAdicionales;
   }
 
   // 4. Lógica de Porcentaje Extra (Si aplica)
@@ -97,6 +98,8 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -115,6 +118,10 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   // Estados para el Reporte Diario
   const [isDailyReportModalOpen, setIsDailyReportModalOpen] = useState(false);
   const [dailyReportDate, setDailyReportDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Estados para Descarga Excel
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [excelDate, setExcelDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Filtros URL
   const [urlFilterRegistro, setUrlFilterRegistro] = useState('');
@@ -154,12 +161,17 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         fetch('/api/registros'), fetch('/api/escribanos')
       ]);
       
-      setDeclaraciones(await resDJ.json());
-      setAranceles(await resAranceles.json());
-      setRegistros(await resReg.json());
-      setEscribanos(await resEsc.json());
+      const djData = await resDJ.json();
+      const arancelesData = await resAranceles.json();
+      const regData = await resReg.json();
+      const escData = await resEsc.json();
+      
+      setDeclaraciones(Array.isArray(djData) ? djData : []);
+      setAranceles(Array.isArray(arancelesData) ? arancelesData : []);
+      setRegistros(Array.isArray(regData) ? regData : []);
+      setEscribanos(Array.isArray(escData) ? escData : []);
     } catch (error) {
-      toast({ title: "Error", description: "Error cargando datos", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Error cargando datos', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsLoading(false);
     }
@@ -181,6 +193,10 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   useEffect(() => {
     if(!editingItem) setEscribanoId('');
   }, [registroId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, urlFilterRegistro, urlFilterEscribano]);
 
   // CÁLCULOS QUE RESPONDEN AL ARANCEL TIPIFICADO (AHORA EDITABLE)
   const numArancelTip = typeof aranceltip === 'number' ? aranceltip : 0;
@@ -259,20 +275,30 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta Declaración Jurada?')) return;
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: '¿Estás seguro de eliminar esta Declaración Jurada?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    });
+    if (!result.isConfirmed) return;
     try {
       const res = await fetch(`/api/declaraciones?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error al eliminar');
-      toast({ title: "Eliminado", description: "Declaración eliminada correctamente" });
+      Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Declaración eliminada correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       fetchData();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo eliminar", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo eliminar', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     }
   };
 
   const handleSave = async () => {
     if (!numerodj || !registroId || !escribanoId || detalles.length === 0) {
-      toast({ title: "Atención", description: "Completa los datos obligatorios y agrega al menos un acto.", variant: "destructive" });
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Completa los datos obligatorios y agrega al menos un acto.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       return;
     }
     setIsSaving(true);
@@ -299,10 +325,10 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Error al guardar');
       }
-      toast({ title: "Éxito", description: editingItem ? "Declaración actualizada" : "Declaración registrada" });
+      Swal.fire({ icon: 'success', title: 'Éxito', text: editingItem ? 'Declaración actualizada' : 'Declaración registrada', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsModalOpen(false); fetchData();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message, confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsSaving(false);
     }
@@ -318,11 +344,11 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const handlePayDjs = async () => {
     if (selectedDjsToPay.length === 0) {
-      toast({ title: "Atención", description: "Selecciona al menos una DJ para registrar el pago.", variant: "destructive" });
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona al menos una DJ para registrar el pago.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       return;
     }
     if (!payDate) {
-      toast({ title: "Atención", description: "La fecha de pago es obligatoria.", variant: "destructive" });
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'La fecha de pago es obligatoria.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       return;
     }
 
@@ -337,11 +363,11 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       
       if (!res.ok) throw new Error('Error al procesar el pago');
       
-      toast({ title: "Pagos Registrados", description: "Se actualizaron las fechas de pago correctamente." });
+      Swal.fire({ icon: 'success', title: 'Pagos Registrados', text: 'Se actualizaron las fechas de pago correctamente.', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsPayModalOpen(false);
       fetchData(); 
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message, confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsProcessingPay(false);
     }
@@ -354,7 +380,75 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   );
   const totalToPay = selectedDjsToPay.reduce((sum, dj) => sum + dj.total, 0);
 
-  // --- LÓGICA PARA EL REPORTE DIARIO ---
+  // --- LÓGICA PARA DESCARGA DE EXCEL ---
+  const handleDownloadExcel = () => {
+    if (!excelDate) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Seleccione una fecha.', confirmButtonText: 'Aceptar' });
+      return;
+    }
+
+    const targetDate = new Date(excelDate + 'T00:00:00').getTime();
+    const djsDelDia = declaraciones.filter(dj => {
+      if (!dj.fecha_pago) return false;
+      const payDate = new Date(dj.fecha_pago);
+      payDate.setHours(0, 0, 0, 0);
+      return payDate.getTime() === targetDate;
+    });
+
+    if (djsDelDia.length === 0) {
+      Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay declaraciones pagadas en esta fecha.', confirmButtonText: 'Aceptar' });
+      return;
+    }
+
+    // Construir filas del Excel
+    const excelRows: any[] = [];
+
+    djsDelDia.forEach(dj => {
+      const detallesStr = dj.detalles?.map((d: any) => `${d.arancel?.codigo || ''} - ${d.arancel?.descripcion || ''}`).join(' | ') || '';
+
+      excelRows.push({
+        'Registro': dj.registro?.numero || dj.registroId || '',
+        'Escribano': dj.escribano?.nombre || '',
+        'N° Escritura': dj.numerodj || '',
+        'Detalle Declaración': detallesStr,
+        'Rubro A': dj.rubroA || 0,
+        'Rubro B': dj.rubroB || 0,
+        'Rubro C': dj.rubroC || 0,
+        'Rubro D': dj.rubroD || 0,
+        'Total': dj.total || 0,
+        'Fecha DJ': new Date(dj.fecha_acto).toLocaleDateString('es-AR'),
+        'Fecha Vto': new Date(dj.fecha_vto).toLocaleDateString('es-AR'),
+        'Fecha Pago': dj.fecha_pago ? new Date(dj.fecha_pago).toLocaleDateString('es-AR') : '',
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(excelRows);
+
+    // Ajustar ancho de columnas
+    ws['!cols'] = [
+      { wch: 12 },  // Registro
+      { wch: 30 },  // Escribano
+      { wch: 14 },  // N° Escritura
+      { wch: 50 },  // Detalle
+      { wch: 14 },  // Rubro A
+      { wch: 14 },  // Rubro B
+      { wch: 14 },  // Rubro C
+      { wch: 14 },  // Rubro D
+      { wch: 14 },  // Total
+      { wch: 14 },  // Fecha DJ
+      { wch: 14 },  // Fecha Vto
+      { wch: 14 },  // Fecha Pago
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Declaraciones');
+
+    const fileName = `Declaraciones_${excelDate.replace(/-/g, '')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    Swal.fire({ icon: 'success', title: 'Descargado', text: `${djsDelDia.length} declaraciones exportadas.`, timer: 2000, showConfirmButton: false });
+    setIsExcelModalOpen(false);
+  };
   const dailyPaidDjs = useMemo(() => {
     if (!dailyReportDate) return [];
     const targetDate = new Date(dailyReportDate + 'T00:00:00').getTime();
@@ -372,7 +466,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const handlePrintDailyReport = () => {
     if (dailyPaidDjs.length === 0) {
-      toast({ title: "Atención", description: "No hay declaraciones pagadas en esta fecha para imprimir.", variant: "destructive" });
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'No hay declaraciones pagadas en esta fecha para imprimir.', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
       return;
     }
 
@@ -471,13 +565,14 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     const matchEsc = urlFilterEscribano ? d.escribanoId === urlFilterEscribano : true;
     return matchSearch && matchReg && matchEsc;
   });
+  const currentDeclaraciones = declaracionesFiltradas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <DashboardLayout role={role} title="Declaraciones Juradas">
-      <Card className="border-0 shadow-sm flex flex-col h-[calc(100vh-12rem)]">
-        <CardHeader className="px-6 py-4 border-b border-gray-100 flex-none">
+      <Card className="border-0 shadow-sm flex flex-col min-h-[60vh] lg:h-[calc(100vh-12rem)]">
+        <CardHeader className="px-4 sm:px-6 py-4 border-b border-gray-100 flex-none">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center gap-4 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto min-w-0">
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                 <Input placeholder="Buscar por Nº DJ..." className="pl-9 focus-visible:ring-primary" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -489,9 +584,13 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               )}
             </div>
 
-            <div className="flex gap-2 w-full sm:w-auto">
-                <Button variant="outline" size="icon" onClick={fetchData}><RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></Button>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="icon" className="shrink-0" onClick={fetchData}><RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></Button>
                 
+                <Button onClick={() => setIsExcelModalOpen(true)} className="gap-2 bg-amber-600 hover:bg-amber-700 text-white w-full sm:w-auto">
+                  <Download className="w-4 h-4" /> Descargar Excel
+                </Button>
+
                 <Button onClick={() => setIsDailyReportModalOpen(true)} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto">
                   <CalendarDays className="w-4 h-4" /> Reporte Diario
                 </Button>
@@ -511,6 +610,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           {isLoading ? (
              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
@@ -523,7 +623,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {declaracionesFiltradas.map(item => (
+                {currentDeclaraciones.map(item => (
                   <TableRow key={item.id} className="hover:bg-gray-50">
                     <TableCell className="font-medium"><Badge variant="outline" className="bg-white">{item.numerodj}</Badge></TableCell>
                     <TableCell>
@@ -548,27 +648,68 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {declaracionesFiltradas.length === 0 && (
+                {currentDeclaraciones.length === 0 && (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No hay declaraciones registradas.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
+        {!isLoading && declaracionesFiltradas.length > 0 && (
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={declaracionesFiltradas.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </Card>
+
+      {/* MODAL DESCARGAR EXCEL */}
+      <Dialog open={isExcelModalOpen} onOpenChange={setIsExcelModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5 text-amber-600" />
+              Descargar Declaraciones en Excel
+            </DialogTitle>
+            <DialogDescription>
+              Seleccione la fecha de pago para exportar las declaraciones juradas pagadas en ese día.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Fecha de Pago</Label>
+              <Input type="date" value={excelDate} onChange={(e) => setExcelDate(e.target.value)} className="focus-visible:ring-amber-600" />
+            </div>
+            {excelDate && (
+              <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                Se exportarán las declaraciones pagadas el: <strong>{new Date(excelDate + 'T00:00:00').toLocaleDateString('es-AR')}</strong>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsExcelModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleDownloadExcel} className="gap-2 bg-amber-600 hover:bg-amber-700 text-white">
+              <Download className="w-4 h-4" /> Descargar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* MODAL REPORTE DIARIO DE RECAUDACIÓN */}
       <Dialog open={isDailyReportModalOpen} onOpenChange={setIsDailyReportModalOpen}>
         <DialogTitle className="sr-only">Reporte Diario</DialogTitle>
-                  <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+                  <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
 
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-blue-600">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2"><CalendarDays className="w-5 h-5"/> Reporte Diario de Recaudación</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-blue-600">
+            <h2 className="text-base sm:text-xl font-semibold text-white flex items-center gap-2"><CalendarDays className="w-5 h-5"/> Reporte Diario de Recaudación</h2>
             <button onClick={() => setIsDailyReportModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
-            <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm mb-6 flex items-center gap-4">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
+            <div className="bg-white p-4 sm:p-5 rounded-lg border border-gray-200 shadow-sm mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="space-y-2 flex-1">
                 <Label className="text-gray-700 font-semibold">Seleccione la Fecha de Pago</Label>
                 <Input type="date" value={dailyReportDate} onChange={(e) => setDailyReportDate(e.target.value)} className="focus-visible:ring-blue-600 max-w-sm" />
@@ -624,9 +765,9 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             )}
           </div>
           
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-white flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            <Button variant="outline" onClick={() => setIsDailyReportModalOpen(false)}>Cerrar</Button>
-            <Button onClick={handlePrintDailyReport} disabled={dailyPaidDjs.length === 0} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t bg-white flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDailyReportModalOpen(false)}>Cerrar</Button>
+            <Button onClick={handlePrintDailyReport} disabled={dailyPaidDjs.length === 0} className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white">
               <Printer className="w-4 h-4" /> Imprimir Reporte
             </Button>
           </div>
@@ -636,16 +777,16 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL REGISTRAR PAGO DE DJ */}
       <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
         <DialogTitle className="sr-only">Registrar Pago de DJ</DialogTitle>
-        <DialogContent className="sm:max-w-2xl w-full flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-2xl flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-green-600">
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-green-600">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2"><CreditCard className="w-5 h-5"/> Registrar Pagos</h2>
             <button onClick={() => setIsPayModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="p-6 space-y-6 bg-gray-50/50">
+          <div className="p-4 sm:p-6 space-y-6 bg-gray-50/50">
             
-            <div className="grid grid-cols-2 gap-6 bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
               <div className="space-y-2">
                 <Label>Fecha del Pago</Label>
                 <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="focus-visible:ring-green-600" />
@@ -727,9 +868,9 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
           </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-white flex-none">
-            <Button variant="outline" onClick={() => setIsPayModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handlePayDjs} disabled={isProcessingPay || selectedDjsToPay.length === 0} className="gap-2 bg-green-600 hover:bg-green-700 text-white min-w-[160px]">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t bg-white flex-none">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsPayModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handlePayDjs} disabled={isProcessingPay || selectedDjsToPay.length === 0} className="w-full sm:w-auto gap-2 bg-green-600 hover:bg-green-700 text-white min-w-[160px]">
               {isProcessingPay ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar Pagos'}
             </Button>
           </div>
@@ -739,14 +880,14 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL CREAR / EDITAR DJ */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogTitle className="sr-only">{editingItem ? 'Editar' : 'Nueva'} Declaración Jurada</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-6xl w-full h-[95vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-6xl h-[95vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-primary">
-            <h2 className="text-2xl font-semibold text-white">{editingItem ? 'Editar' : 'Crear'} Declaración Jurada</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-primary">
+            <h2 className="text-lg sm:text-2xl font-semibold text-white">{editingItem ? 'Editar' : 'Crear'} Declaración Jurada</h2>
             <button onClick={() => setIsModalOpen(false)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div className="mb-8 bg-gray-50 p-6 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold mb-4 text-gray-900">Información General</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -782,11 +923,11 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                   )}
                 </div>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Número de DJ *</label><input type="text" placeholder="Ej. 123456" value={numerodj} onChange={(e) => setNumerodj(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Código DJ</label><input type="text" placeholder="Ej. A1" value={codigodj} onChange={(e) => setCodigodj(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Acto *</label><input type="date" value={fechaActo} onChange={(e) => setFechaActo(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                     <div><label className="block text-sm font-medium text-gray-700 mb-1 flex justify-between">Vencimiento <span className="text-[10px] text-primary/70 font-normal mt-1">(+15 días)</span></label><input type="date" value={fechaVto} readOnly className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 outline-none cursor-not-allowed" /></div>
                   </div>
@@ -852,7 +993,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             <div className="bg-gray-50 p-6 rounded-lg border border-gray-100 flex flex-col lg:flex-row gap-8 justify-between">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold mb-4 text-gray-900">Cargos Adicionales (Rubro A)</h3>
-                <div className="grid grid-cols-2 gap-4 max-w-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Inscripción ($)</label><input type="number" value={inscripcion || ''} onChange={(e) => setInscripcion(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:ring-primary" /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Impuesto ($)</label><input type="number" value={impuesto || ''} onChange={(e) => setImpuesto(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:ring-primary" /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Recargo Sellos ($)</label><input type="number" value={recargoSellos || ''} onChange={(e) => setRecargoSellos(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:ring-primary" /></div>
@@ -888,7 +1029,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 flex-none">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t bg-gray-50 flex-none">
             <button onClick={() => setIsModalOpen(false)} disabled={isSaving} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-100">Cancelar</button>
             <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-primary text-white font-medium rounded-md hover:bg-primary/90 flex items-center justify-center min-w-[160px]">
               {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingItem ? 'Actualizar DJ' : 'Guardar DJ')}
@@ -900,15 +1041,15 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL 3: VER DJ INDIVIDUAL (Solo Lectura) */}
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
         <DialogTitle className="sr-only">Ver Declaración Jurada</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
-            <h2 className="text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-gray-50">
+            <h2 className="text-lg sm:text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
             <button onClick={() => setIsViewModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
           {viewingItem && (
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <Card className="shadow-sm border-gray-200 col-span-2"><CardContent className="p-5">
@@ -938,7 +1079,7 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 </CardContent></Card>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
                   <span className="text-sm text-gray-500 font-medium">Fecha de Acto</span>
                   <span className="font-semibold text-gray-900">{new Date(viewingItem.fecha_acto).toLocaleDateString('es-AR')}</span>

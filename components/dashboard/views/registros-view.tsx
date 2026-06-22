@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
-import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, ChevronLeft, ChevronRight, FileText, Printer, Eye, AlertCircle, X, Building2, CreditCard } from 'lucide-react';
+import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
+import Swal from 'sweetalert2';
+import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, FileText, Printer, Eye, AlertCircle, X, Building2, CreditCard } from 'lucide-react';
 
 export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const router = useRouter();
@@ -22,7 +23,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 10;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -50,7 +51,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const data = await res.json();
       setRegistros(data);
     } catch (error) {
-      toast({ title: "Error", description: "Error cargando registros", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Error cargando registros', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +77,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const filtered = data.filter((d: any) => d.registroId === pendingEntity.numero && d.anio === parseInt(selectedYear));
       setSelectedEntityDjs(filtered);
     } catch (error) {
-      toast({ title: "Error", description: "Error al cargar las declaraciones", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Error al cargar las declaraciones', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setDjsLoading(false);
     }
@@ -142,24 +143,34 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       const res = await fetch('/api/registros', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
-      toast({ title: "Éxito", description: "Operación exitosa" });
+      Swal.fire({ icon: 'success', title: 'Éxito', text: 'Operación exitosa', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsModalOpen(false); fetchRegistros();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: error.message, confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Seguro que deseas eliminar este registro?')) return;
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: '¿Seguro que deseas eliminar este registro?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    });
+    if (!result.isConfirmed) return;
     try {
       const res = await fetch(`/api/registros?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error al eliminar');
-      toast({ title: "Eliminado", description: "Registro eliminado" });
+      Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Registro eliminado', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       fetchRegistros();
     } catch (error: any) {
-      toast({ title: "Error", description: "No se pudo eliminar", variant: "destructive" });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo eliminar', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     }
   };
 
@@ -169,26 +180,25 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     .filter(r => r.numero.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true, sensitivity: 'base' }));
   
-  const totalPages = Math.max(1, Math.ceil(filteredRegistros.length / itemsPerPage));
   const currentRegistros = filteredRegistros.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <DashboardLayout role={role} title="Gestión de Registros">
-      <Card className="border-0 shadow-sm flex flex-col h-[calc(100vh-12rem)]">
-        <CardHeader className="px-6 py-4 border-b border-gray-100 flex-none">
+      <Card className="border-0 shadow-sm flex flex-col min-h-[60vh] lg:h-[calc(100vh-12rem)]">
+        <CardHeader className="px-4 sm:px-6 py-4 border-b border-gray-100 flex-none">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
               <Input placeholder="Buscar por número..." className="pl-9 focus-visible:ring-primary" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-                <Button variant="outline" size="icon" onClick={fetchRegistros}><RefreshCcw className="w-4 h-4" /></Button>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button variant="outline" size="icon" className="shrink-0" onClick={fetchRegistros}><RefreshCcw className="w-4 h-4" /></Button>
                 <Button onClick={() => handleOpenModal()} className="gap-2 bg-primary hover:bg-primary/90 text-white w-full sm:w-auto"><Plus className="w-4 h-4" /> Nuevo Registro</Button>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="p-0">
+        <CardContent className="p-0 flex-1 overflow-auto">
           {isLoading ? (
              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
           ) : (
@@ -230,14 +240,12 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         </CardContent>
 
         {!isLoading && filteredRegistros.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-b-xl flex-none">
-            <span className="text-sm text-gray-500">Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredRegistros.length)} de {filteredRegistros.length}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Anterior</span></Button>
-              <span className="text-sm font-medium mx-2 whitespace-nowrap">Página {currentPage} de {totalPages}</span>
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}><span className="hidden sm:inline">Siguiente</span> <ChevronRight className="w-4 h-4 sm:ml-1" /></Button>
-            </div>
-          </div>
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={filteredRegistros.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+          />
         )}
       </Card>
 
@@ -272,13 +280,13 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL 1: LISTADO DE DECLARACIONES */}
       <Dialog open={isDjListModalOpen} onOpenChange={setIsDjListModalOpen}>
         <DialogTitle className="sr-only">Listado de Declaraciones</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-primary" /> Historial de Declaraciones</h2>
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-gray-50">
+            <h2 className="text-base sm:text-xl font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-primary" /> Historial de Declaraciones</h2>
             <button onClick={() => setIsDjListModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"><X className="w-6 h-6" /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
             {djsLoading ? (
               <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>
             ) : (
@@ -313,7 +321,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                               <TableCell className="text-right whitespace-nowrap no-print">
                                 <Button variant="ghost" size="icon" onClick={() => { setViewingDj(dj); setIsViewDjModalOpen(true); }} title="Ver Detalle"><Eye className="w-4 h-4 text-gray-500" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => {
-                                  toast({ title: "Redirigiendo", description: "Abriendo el módulo de Declaraciones para edición..." });
+                                  Swal.fire({ icon: 'info', title: 'Redirigiendo', text: 'Abriendo el módulo de Declaraciones para edición...', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
                                   router.push(`/${role.toLowerCase()}/declaraciones?registroId=${dj.registroId}`);
                                 }} title="Editar DJ (Redirige al módulo)"><Edit className="w-4 h-4 text-blue-600" /></Button>
                               </TableCell>
@@ -342,9 +350,9 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             )}
           </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-white flex-none">
-            <Button variant="outline" onClick={() => setIsDjListModalOpen(false)}>Cerrar</Button>
-            <Button onClick={handlePrintReport} disabled={djsLoading || selectedEntityDjs.length === 0} className="gap-2 bg-primary text-white hover:bg-primary/90">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t bg-white flex-none">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDjListModalOpen(false)}>Cerrar</Button>
+            <Button onClick={handlePrintReport} disabled={djsLoading || selectedEntityDjs.length === 0} className="w-full sm:w-auto gap-2 bg-primary text-white hover:bg-primary/90">
               <Printer className="w-4 h-4" /> Imprimir Informe
             </Button>
           </div>
@@ -354,17 +362,17 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       {/* MODAL 2: VER DJ INDIVIDUAL (DISEÑO PREMIUM) */}
       <Dialog open={isViewDjModalOpen} onOpenChange={setIsViewDjModalOpen}>
         <DialogTitle className="sr-only">Ver Declaración Jurada</DialogTitle>
-        <DialogContent className="sm:max-w-[95vw] lg:max-w-5xl w-full h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[95vw] lg:max-w-5xl h-[90vh] sm:h-[85vh] flex flex-col p-0 overflow-hidden bg-white gap-0 [&>button]:hidden">
           
-          <div className="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
-            <h2 className="text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
+          <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-b bg-gray-50">
+            <h2 className="text-lg sm:text-2xl font-semibold text-gray-900">Detalle de Declaración Jurada</h2>
             <button onClick={() => setIsViewDjModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {viewingDj && (
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/30">
               
               {/* Header Info */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -395,7 +403,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               </div>
 
               {/* Fechas */}
-              <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
                   <span className="text-sm text-gray-500 font-medium">Fecha de Acto</span>
                   <span className="font-semibold text-gray-900">{new Date(viewingDj.fecha_acto).toLocaleDateString('es-AR')}</span>
@@ -461,7 +469,7 @@ export function RegistrosView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
             <DialogDescription>Administra los detalles del registro notarial.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-             <div className="grid grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Número de Registro</Label><Input value={formData.numero} onChange={(e) => setFormData({...formData, numero: e.target.value})} /></div>
               <div className="space-y-2"><Label>Estado</Label><Select value={formData.estado} onValueChange={(val) => setFormData({...formData, estado: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Activo">Activo</SelectItem><SelectItem value="Inactivo">Inactivo</SelectItem></SelectContent></Select></div>
             </div>

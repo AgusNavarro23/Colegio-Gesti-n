@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toast } from '@/hooks/use-toast';
+import Swal from 'sweetalert2';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Users, Shield, UserPlus, Loader2 } from 'lucide-react';
@@ -51,7 +51,7 @@ export function AdminDashboard() {
       const data = await response.json();
       setUsers(data);
     } catch (error) {
-      toast({ title: 'Error', description: 'No se pudieron cargar los usuarios', variant: 'destructive' });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar los usuarios', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsLoading(false);
     }
@@ -74,13 +74,13 @@ export function AdminDashboard() {
 
       if (!response.ok) throw new Error('Error al crear usuario');
 
-      toast({ title: 'Usuario creado', description: 'El usuario ha sido creado correctamente' });
+      await Swal.fire({ icon: 'success', title: 'Usuario creado', text: 'El usuario ha sido creado correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
 
       setFormData({ name: '', email: '', password: '', role: 'EMPLOYEE' });
       setIsDialogOpen(false);
       fetchUsers();
     } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo crear el usuario', variant: 'destructive' });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo crear el usuario', confirmButtonText: 'Aceptar', allowOutsideClick: false, allowEscapeKey: false });
     } finally {
       setIsSubmitting(false);
     }

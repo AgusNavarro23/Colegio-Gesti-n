@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hash } from 'bcryptjs';
 import { z } from 'zod';
+import { verifyToken } from '@/lib/jwt';
 
 const createUserSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -10,27 +11,26 @@ const createUserSchema = z.object({
   role: z.enum(['ADMIN', 'EMPLOYEE', 'CLIENT']),
 });
 
-// Verificar token
-function verifyToken(token: string) {
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    return JSON.parse(decoded);
-  } catch {
-    return null;
+function getCurrentUser(request: NextRequest) {
+  const token = request.cookies.get('auth-token')?.value;
+  if (!token) {
+    const authHeader = request.headers.get('authorization');
+    const bearerToken = authHeader?.replace('Bearer ', '');
+    if (!bearerToken) return null;
+    try {
+      const decoded = Buffer.from(bearerToken, 'base64').toString('utf8');
+      return JSON.parse(decoded);
+    } catch {
+      return null;
+    }
   }
+  return verifyToken(token);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const decoded = verifyToken(token);
-
-    if (!decoded || decoded.role !== 'ADMIN') {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser || currentUser.role !== 'ADMIN') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
@@ -47,22 +47,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const decoded = verifyToken(token);
-
-    if (!decoded || decoded.role !== 'ADMIN') {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser || currentUser.role !== 'ADMIN') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
     const body = await request.json();
     const { email, password, name, role } = createUserSchema.parse(body);
 
-    // Verificar si el email ya existe
     const existingUser = await db.user.findUnique({
       where: { email },
     });
@@ -74,16 +66,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash de la contraseña
     const hashedPassword = await hash(password, 10);
 
-    // Crear usuario
     const user = await db.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
         role,
+        createdById: currentUser.userId,
       },
     });
 

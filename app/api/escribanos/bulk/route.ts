@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getUserFromRequest } from '@/lib/get-user';
 
 const prisma = new PrismaClient();
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const escribanos = await request.json();
 
     if (!Array.isArray(escribanos) || escribanos.length === 0) {
@@ -27,23 +29,21 @@ export async function POST(request: Request) {
         await prisma.escribano.create({
           data: {
             nombre: esc.nombre,
-            dni: esc.dni, // Se guarda el DNI que viene del Excel
+            dni: esc.dni,
             matricula: esc.matricula.toString(),
             condicion: esc.condicion || 'Titular',
             estado: esc.estado || 'Activo',
             registroId: registroValido,
+            createdById: user?.userId ?? null,
           },
         });
         agregados++;
         
       } catch (error: any) {
-        // Validación estricta del error
         if (error.code === 'P2002') {
-          // P2002 = Constraint failed (La matrícula o DNI ya está registrada, lo ignoramos en silencio)
           omitidos++;
         } else {
-          // OTRO ERROR: Lo imprimimos en la consola de tu VSC para saber qué está fallando
-          console.error(`🚨 Error al guardar al escribano [${esc.nombre}]:`, error.message);
+          console.error(`Error al guardar al escribano [${esc.nombre}]:`, error.message);
           omitidos++;
         }
       }

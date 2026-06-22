@@ -1,14 +1,12 @@
-import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/get-user';
+import { db } from '@/lib/db';
 
-const prisma = new PrismaClient();
-
-// GET: Obtener lista
 export async function GET() {
   try {
-    const escribanos = await prisma.escribano.findMany({
+    const escribanos = await db.escribano.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { registro: true } // Traemos la relación
+      include: { registro: true }
     });
     return NextResponse.json(escribanos);
   } catch (error) {
@@ -16,35 +14,34 @@ export async function GET() {
   }
 }
 
-// POST: Crear nuevo
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
-    const { nombre, matricula, condicion, estado, registroId } = body;
+    const { nombre, matricula, condicion, estado, dni, registroId, categoria } = body;
 
-    // Validación básica
     if (!nombre || !matricula) {
       return NextResponse.json({ error: 'Nombre y Matrícula son obligatorios' }, { status: 400 });
     }
 
-    const nuevo = await prisma.escribano.create({
+    const nuevo = await db.escribano.create({
       data: {
         nombre,
         matricula,
         condicion: condicion || 'Titular',
         estado: estado || 'Activo',
-        // Si registroId viene vacío, enviamos null, si no, conectamos
-        registro: registroId ? { connect: { numero: registroId } } : undefined
-      },
+        dni,
+        categoria: categoria || 'D',
+        ...(registroId ? { registro: { connect: { numero: registroId } } } : {}),
+        createdById: user?.userId ?? null,
+      } as any,
     });
 
     return NextResponse.json(nuevo, { status: 201 });
   } catch (error: any) {
-    // Si el error es por matrícula duplicada (código P2002 en Prisma)
     if (error.code === 'P2002') {
       return NextResponse.json({ error: 'La matrícula ya existe' }, { status: 400 });
     }
-    // Si el registro no existe (código P2025)
     if (error.code === 'P2025') {
        return NextResponse.json({ error: 'El registro indicado no existe' }, { status: 400 });
     }
@@ -52,26 +49,27 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: Editar existente
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
-    const { id, nombre, matricula, condicion, estado, registroId } = body;
+    const { id, nombre, matricula, condicion, estado, registroId, categoria } = body;
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
-    const actualizado = await prisma.escribano.update({
+    const actualizado = await db.escribano.update({
       where: { id },
       data: {
         nombre,
         matricula,
         condicion,
         estado,
-        // Lógica para actualizar relación: desconectar si está vacío, conectar si tiene valor
-        registro: registroId 
-          ? { connect: { numero: registroId } } 
-          : { disconnect: true }
-      },
+        categoria,
+        ...(registroId
+          ? { registro: { connect: { numero: registroId } } }
+          : { registro: { disconnect: true } }),
+        updatedById: user?.userId ?? null,
+      } as any,
     });
 
     return NextResponse.json(actualizado);
@@ -80,7 +78,6 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE: Eliminar
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -88,7 +85,7 @@ export async function DELETE(request: Request) {
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
-    await prisma.escribano.delete({
+    await db.escribano.delete({
       where: { id },
     });
 

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { getUserFromRequest } from '@/lib/get-user';
 
 const prisma = new PrismaClient();
 
@@ -14,10 +15,10 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
-    // 1. AGREGA 'localidad' A LA EXTRACCIÓN DEL BODY
     const { numero, direccion, estado, localidad } = body;
 
     if (!numero || !direccion) {
@@ -25,12 +26,12 @@ export async function POST(request: Request) {
     }
 
     const nuevo = await prisma.registro.create({
-      // 2. AGREGA 'localidad' A LOS DATOS DE PRISMA
       data: { 
         numero, 
         direccion, 
         estado: estado || 'Activo',
-        localidad: localidad || 'Salta Capital' 
+        localidad: localidad || 'Salta Capital',
+        createdById: user?.userId ?? null,
       },
     });
 
@@ -41,22 +42,22 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const user = getUserFromRequest(request);
     const body = await request.json();
-    // 3. AGREGA 'localidad' EN EL MÉTODO PUT
     const { id, numero, direccion, estado, localidad } = body;
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
     const actualizado = await prisma.registro.update({
       where: { id },
-      // 4. ACTUALIZA LA LOCALIDAD EN LA BASE DE DATOS
       data: { 
         numero, 
         direccion, 
         estado,
-        localidad
+        localidad,
+        updatedById: user?.userId ?? null,
       },
     });
 

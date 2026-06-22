@@ -27,9 +27,11 @@ export const useAuthStore = create<AuthState>()(
       login: (user, token) => set({ user, token, isAuthenticated: true }),
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
-        // Forzamos limpieza de sessionStorage y redirección
-        sessionStorage.clear(); 
-        window.location.href = '/login';
+        // Solo limpiamos sesión; la redirección queda a cargo de la UI que llama logout.
+        sessionStorage.clear();
+        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {
+          // Evitamos romper UX si la limpieza de cookie falla.
+        });
       },
     }),
     {

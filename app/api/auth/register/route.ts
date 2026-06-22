@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       })
     ).toString('base64');
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
@@ -58,6 +58,16 @@ export async function POST(request: NextRequest) {
       },
       token,
     });
+
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 8, // 8 horas
+    });
+
+    return response;
   } catch (error) {
     console.error('Register error:', error);
 

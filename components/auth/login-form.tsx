@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from '@/hooks/use-toast';
+import Swal from 'sweetalert2';
 import { Loader2, Scale, Shield } from 'lucide-react';
 
 export function LoginForm() {
@@ -33,17 +33,25 @@ export function LoginForm() {
       }
 
       setAuth(data.user, data.token);
-      toast({
+      await Swal.fire({
+        icon: 'success',
         title: '¡Bienvenido!',
-        description: 'Has iniciado sesión correctamente.',
+        text: 'Has iniciado sesión correctamente.',
+        timer: 2000,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
 
       // Recargar la página para redirigir al dashboard correspondiente
     } catch (error) {
-      toast({
+      await Swal.fire({
+        icon: 'error',
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Error al iniciar sesión',
-        variant: 'destructive',
+        text: error instanceof Error ? error.message : 'Error al iniciar sesión',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
     } finally {
       setIsLoading(false);
@@ -115,6 +123,14 @@ export function LoginForm() {
                   Regístrate aquí
                 </a>
               </div>
+              <div className="text-center text-sm">
+                <a
+                  href="/forgot-password"
+                  className="text-gray-500 hover:text-primary font-medium transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
             </CardFooter>
           </form>
         </Card>
@@ -125,7 +141,7 @@ export function LoginForm() {
             <Shield className="w-3 h-3" />
             <span>Seguridad garantizada con encriptación SSL</span>
           </div>
-          <p>© 2024 Notaría Digital. Todos los derechos reservados.</p>
+          <p>© 2026 Colegio de Escribanos de Salta. Todos los derechos reservados.</p>
         </div>
       </div>
     </div>

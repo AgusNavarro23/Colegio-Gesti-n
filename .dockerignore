@@ -1,0 +1,12 @@
+# Ignorar dependencias locales (Docker instalará las suyas)
+node_modules
+npm-debug.log
+
+# Ignorar la carpeta de compilación local de Next.js
+.next
+out
+build
+
+# Ignorar archivos de Git
+.git
+.gitignore

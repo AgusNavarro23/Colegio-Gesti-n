@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from '@/hooks/use-toast';
+import Swal from 'sweetalert2';
 import { Loader2, Scale, Shield } from 'lucide-react';
 
 export function RegisterForm() {
@@ -21,19 +21,25 @@ export function RegisterForm() {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      toast({
+      await Swal.fire({
+        icon: 'error',
         title: 'Error',
-        description: 'Las contraseñas no coinciden',
-        variant: 'destructive',
+        text: 'Las contraseñas no coinciden',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
       return;
     }
 
     if (password.length < 6) {
-      toast({
+      await Swal.fire({
+        icon: 'error',
         title: 'Error',
-        description: 'La contraseña debe tener al menos 6 caracteres',
-        variant: 'destructive',
+        text: 'La contraseña debe tener al menos 6 caracteres',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
       return;
     }
@@ -54,18 +60,26 @@ export function RegisterForm() {
       }
 
       setAuth(data.user, data.token);
-      toast({
+      await Swal.fire({
+        icon: 'success',
         title: '¡Registro exitoso!',
-        description: 'Bienvenido a Notaría Digital.',
+        text: 'Bienvenido a Notaría Digital.',
+        timer: 2000,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
 
       // Recargar la página para redirigir al dashboard
       window.location.reload();
     } catch (error) {
-      toast({
+      await Swal.fire({
+        icon: 'error',
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Error al registrar usuario',
-        variant: 'destructive',
+        text: error instanceof Error ? error.message : 'Error al registrar usuario',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
       });
     } finally {
       setIsLoading(false);
