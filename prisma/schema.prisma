@@ -78,10 +78,22 @@ model Registro {
   updatedBy   User?  @relation("RegistroUpdatedBy", fields: [updatedById], references: [id])
 }
 
+enum TipoRegla {
+  INDIVIDUAL
+  COMBINADO
+  EXENTO
+}
+
+enum TipoCalculo {
+  NORMAL
+  PORCENTAJE_SOBRE_TOTAL
+}
+
 model Arancel {
   id String @id @default(cuid())
   codigoRenta String
   descripcion String
+  tipoCalculo TipoCalculo @default(NORMAL)
   minimo Float
   maximo Float
   porcentaje1 Float
@@ -90,6 +102,7 @@ model Arancel {
   adicional Float
   observaciones String?
   detalles      DetalleDeclaracion[]
+  reglas        ArancelRegla[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -97,6 +110,25 @@ model Arancel {
   createdBy   User?  @relation("ArancelCreatedBy", fields: [createdById], references: [id])
   updatedById String?
   updatedBy   User?  @relation("ArancelUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model ArancelRegla {
+  id String @id @default(cuid())
+  tipo TipoRegla
+  tipoCalculo TipoCalculo @default(NORMAL)
+  minimo Float
+  maximo Float
+  porcentaje1 Float
+  porcentaje2 Float
+  porcentaje3 Float
+  adicional Float
+  observaciones String?
+
+  arancelId String
+  arancel   Arancel @relation(fields: [arancelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model DeclaracionJurada {
@@ -126,7 +158,7 @@ model DeclaracionJurada {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([numerodj, registroId, anio])
+  @@unique([registroId, anio, numerodj, codigodj])
 
   createdById String?
   createdBy   User?  @relation("DeclaracionJuradaCreatedBy", fields: [createdById], references: [id])
@@ -172,6 +204,7 @@ model DeclaracionVerificar {
   nivelRiesgo       String   @default("VERDE")
   motivos_riesgo    String?
   estado            String   @default("PENDIENTE_REVISION")
+  observacion       String?
   actos_resumen     String?
   detalles_arancel  String?
   pdfPath           String?

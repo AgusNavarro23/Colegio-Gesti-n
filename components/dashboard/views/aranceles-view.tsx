@@ -8,11 +8,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea'; // Asegúrate de tener este componente
 import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
 import Swal from 'sweetalert2';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Loader2, RefreshCcw, ChevronDown, ChevronUp } from 'lucide-react';
+
+const TIPO_REGLA_LABELS: Record<string, string> = {
+  INDIVIDUAL: 'Individual',
+  COMBINADO: 'Combinado',
+  EXENTO: 'Exento',
+};
+
+const emptyRegla = () => ({
+  tipo: 'INDIVIDUAL',
+  tipoCalculo: 'NORMAL',
+  minimo: '', maximo: '', porcentaje1: '', porcentaje2: '', porcentaje3: '', adicional: '', observaciones: '',
+});
 
 export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
   const [aranceles, setAranceles] = useState<any[]>([]);
@@ -25,12 +36,14 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   
-  // Estado del formulario actualizado
   const [formData, setFormData] = useState({ 
-    codigo: '', descripcion: '', minimo: '', maximo: '', 
-    porcentaje1: '', porcentaje2: '',porcentaje3:"", adicional: '', observaciones: '' 
+    codigo: '', descripcion: '', tipoCalculo: 'NORMAL',
+    minimo: '', maximo: '', 
+    porcentaje1: '', porcentaje2: '', porcentaje3: '', adicional: '', observaciones: '' 
   });
+  const [reglas, setReglas] = useState<any[]>([]);
 
   const fetchAranceles = async () => {
     setIsLoading(true);
@@ -53,21 +66,36 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setEditingItem(item);
     if (item) {
       setFormData({ 
-        codigo: item.codigo || '', 
+        codigo: item.codigoRenta || '', 
         descripcion: item.descripcion || '', 
-        minimo: item.minimo !== null ? item.minimo.toString() : '', 
-        maximo: item.maximo !== null ? item.maximo.toString() : '', 
-        porcentaje1: item.porcentaje1 !== null ? item.porcentaje1.toString() : '', 
-        porcentaje2: item.porcentaje2 !== null ? item.porcentaje2.toString() : '', 
-        porcentaje3: item.porcentaje3 !== null ? item.porcentaje3.toString() : '',
-        adicional: item.adicional !== null ? item.adicional.toString() : '', 
+        tipoCalculo: item.tipoCalculo || 'NORMAL',
+        minimo: item.minimo != null ? item.minimo.toString() : '', 
+        maximo: item.maximo != null ? item.maximo.toString() : '', 
+        porcentaje1: item.porcentaje1 != null ? item.porcentaje1.toString() : '', 
+        porcentaje2: item.porcentaje2 != null ? item.porcentaje2.toString() : '', 
+        porcentaje3: item.porcentaje3 != null ? item.porcentaje3.toString() : '',
+        adicional: item.adicional != null ? item.adicional.toString() : '', 
         observaciones: item.observaciones || '' 
       });
+      setReglas((item.reglas || []).map((r: any) => ({
+        id: r.id,
+        tipo: r.tipo,
+        tipoCalculo: r.tipoCalculo || 'NORMAL',
+        minimo: r.minimo?.toString() || '',
+        maximo: r.maximo?.toString() || '',
+        porcentaje1: r.porcentaje1?.toString() || '',
+        porcentaje2: r.porcentaje2?.toString() || '',
+        porcentaje3: r.porcentaje3?.toString() || '',
+        adicional: r.adicional?.toString() || '',
+        observaciones: r.observaciones || '',
+      })));
     } else {
       setFormData({ 
-        codigo: '', descripcion: '', minimo: '', maximo: '', 
-        porcentaje1: '', porcentaje2: '', adicional: '', porcentaje3: '', observaciones: ''
+        codigo: '', descripcion: '', tipoCalculo: 'NORMAL',
+        minimo: '', maximo: '', 
+        porcentaje1: '', porcentaje2: '', porcentaje3: '', adicional: '', observaciones: ''
       });
+      setReglas([]);
     }
     setIsModalOpen(true);
   };
@@ -76,13 +104,15 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setIsSaving(true);
     try {
       const method = editingItem ? 'PUT' : 'POST';
-      const body = editingItem ? { ...formData, id: editingItem.id } : formData;
+      const body = editingItem 
+        ? { ...formData, id: editingItem.id, reglas } 
+        : { ...formData, reglas };
       const res = await fetch('/api/aranceles', {
         method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al guardar');
-      Swal.fire({ icon: 'success', title: 'Éxito', text: 'Arancel guardado correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
+      Swal.fire({ icon: 'success', title: 'Exito', text: 'Arancel guardado correctamente', timer: 2000, showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false });
       setIsModalOpen(false);
       fetchAranceles();
     } catch (error: any) {
@@ -94,11 +124,11 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const handleDelete = async (id: string) => {
     const result = await Swal.fire({
-      title: '¿Estás seguro?',
+      title: '¿Estas seguro?',
       text: '¿Seguro que deseas eliminar este arancel?',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Si, eliminar',
       cancelButtonText: 'Cancelar',
       allowOutsideClick: false,
       allowEscapeKey: false,
@@ -114,6 +144,14 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     }
   };
 
+  const addRegla = () => setReglas([...reglas, emptyRegla()]);
+  const removeRegla = (idx: number) => setReglas(reglas.filter((_, i) => i !== idx));
+  const updateRegla = (idx: number, field: string, value: string) => {
+    const updated = [...reglas];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setReglas(updated);
+  };
+
   const filteredAranceles = aranceles.filter(a => 
     (a.descripcion && a.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (a.codigoRenta && a.codigoRenta.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -121,26 +159,24 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
 
   const currentAranceles = filteredAranceles.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Helper para formatear moneda
   const formatMoney = (val: number | null) => {
     if (val === null || val === undefined) return '-';
     return `$${val.toLocaleString('es-AR')}`;
   };
 
-  // Helper para formatear porcentaje
   const formatPercent = (val: number | null) => {
     if (val === null || val === undefined) return '-';
     return `${val}%`;
   };
 
   return (
-    <DashboardLayout role={role} title="Gestión de Aranceles">
+    <DashboardLayout role={role} title="Gestion de Aranceles">
       <Card className="border-0 shadow-sm flex flex-col min-h-[60vh] lg:h-[calc(100vh-12rem)]">
         <CardHeader className="px-4 sm:px-6 py-4 border-b border-gray-100 flex-none">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-              <Input placeholder="Buscar por código o descripción..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <Input placeholder="Buscar por codigo o descripcion..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <Button variant="outline" size="icon" className="shrink-0" onClick={fetchAranceles}><RefreshCcw className="w-4 h-4" /></Button>
@@ -157,42 +193,84 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50/50">
-                    <TableHead className="w-20">Código</TableHead>
-                    <TableHead className="min-w-50">Descripción</TableHead>
-                    <TableHead>Mínimo</TableHead>
-                    <TableHead>Máximo</TableHead>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="w-20">Codigo</TableHead>
+                    <TableHead className="min-w-50">Descripcion</TableHead>
+                    <TableHead>Minimo</TableHead>
+                    <TableHead>Maximo</TableHead>
                     <TableHead>Base / Exc.</TableHead>
                     <TableHead>Adicional</TableHead>
+                    <TableHead>Reglas</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {currentAranceles.map(item => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium"><Badge variant="outline">{item.codigoRenta}</Badge></TableCell>
-                      <TableCell className="text-gray-900">
-                        <div className="font-medium">{item.descripcion}</div>
-                        {item.observaciones && <div className="text-xs text-gray-500 line-clamp-1">{item.observaciones}</div>}
-                      </TableCell>
-                      <TableCell className="text-gray-600">{formatMoney(item.minimo)}</TableCell>
-                      <TableCell className="text-gray-600">{formatMoney(item.maximo)}</TableCell>
-                      <TableCell className="text-gray-600">
-                        <div className="flex flex-col text-xs">
-                          {item.porcentaje1 !== null && <span>Base: {formatPercent(item.porcentaje1)}</span>}
-                          {item.porcentaje2 !== null && <span className="text-orange-600">Exc: {formatPercent(item.porcentaje2)}</span>}
-                          {item.porcentaje3 !== null && <span className="text-green-600">Adic: {formatPercent(item.porcentaje3)}</span>}
-                          {item.porcentaje1 === null && item.porcentaje2 === null && item.porcentaje3 === null && '-'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-gray-600">{formatMoney(item.adicional)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4 text-blue-600" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                      </TableCell>
-                    </TableRow>
+                    <>
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)}>
+                            {expandedRow === item.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-medium"><Badge variant="outline">{item.codigoRenta}</Badge></TableCell>
+                        <TableCell className="text-gray-900">
+                          <div className="font-medium">{item.descripcion}</div>
+                          {item.observaciones && <div className="text-xs text-gray-500 line-clamp-1">{item.observaciones}</div>}
+                          {item.tipoCalculo === 'PORCENTAJE_SOBRE_TOTAL' && (
+                            <Badge variant="secondary" className="text-xs mt-1 bg-purple-100 text-purple-700">% sobre total</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-gray-600">{formatMoney(item.minimo)}</TableCell>
+                        <TableCell className="text-gray-600">{formatMoney(item.maximo)}</TableCell>
+                        <TableCell className="text-gray-600">
+                          <div className="flex flex-col text-xs">
+                            {item.porcentaje1 !== null && <span>Base: {formatPercent(item.porcentaje1)}</span>}
+                            {item.porcentaje2 !== null && <span className="text-orange-600">Exc: {formatPercent(item.porcentaje2)}</span>}
+                            {item.porcentaje3 !== null && <span className="text-green-600">Adic: {formatPercent(item.porcentaje3)}</span>}
+                            {item.porcentaje1 === null && item.porcentaje2 === null && item.porcentaje3 === null && '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-gray-600">{formatMoney(item.adicional)}</TableCell>
+                        <TableCell>
+                          {item.reglas && item.reglas.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {item.reglas.map((r: any) => (
+                                <Badge key={r.id} variant="secondary" className="text-xs">
+                                  {TIPO_REGLA_LABELS[r.tipo] || r.tipo}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : <span className="text-gray-400 text-xs">Sin reglas</span>}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                        </TableCell>
+                      </TableRow>
+                      {expandedRow === item.id && item.reglas && item.reglas.length > 0 && (
+                        <TableRow key={`${item.id}-reglas`}>
+                          <TableCell colSpan={9} className="bg-gray-50 p-3">
+                            <div className="text-xs font-semibold text-gray-600 mb-2">Reglas de Calculo:</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {item.reglas.map((r: any) => (
+                                <div key={r.id} className="bg-white rounded border p-2 text-xs">
+                                  <Badge variant={r.tipo === 'EXENTO' ? 'destructive' : r.tipo === 'COMBINADO' ? 'default' : 'secondary'} className="mb-1">
+                                    {TIPO_REGLA_LABELS[r.tipo]}
+                                  </Badge>
+                                  <div>Min: {formatMoney(r.minimo)} | Max: {formatMoney(r.maximo)}</div>
+                                  <div>Base: {formatPercent(r.porcentaje1)} | Exc: {formatPercent(r.porcentaje2)}</div>
+                                  <div>Adic %: {formatPercent(r.porcentaje3)} | Adic $: {formatMoney(r.adicional)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
                   ))}
                   {currentAranceles.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No se encontraron aranceles</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-gray-500">No se encontraron aranceles</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -200,7 +278,6 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           )}
         </CardContent>
 
-        {/* CONTROLES DE PAGINACIÓN */}
         {!isLoading && filteredAranceles.length > 0 && (
           <PaginationControls
             currentPage={currentPage}
@@ -211,33 +288,44 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         )}
       </Card>
 
-      {/* MODAL AMPLIADO */}
+      {/* MODAL */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-2xl">
+        <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Editar Arancel' : 'Nuevo Arancel'}</DialogTitle>
-            <DialogDescription>Configura los parámetros de cálculo para este trámite.</DialogDescription>
+            <DialogDescription>Configura los parametros de calculo para este tramite.</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="col-span-1 space-y-2">
-                <Label>Código *</Label>
+                <Label>Codigo *</Label>
                 <Input value={formData.codigo} onChange={(e) => setFormData({...formData, codigo: e.target.value})} placeholder="Ej. 1.A" />
               </div>
-              <div className="col-span-3 space-y-2">
-                <Label>Descripción del Trámite *</Label>
-                <Input value={formData.descripcion} onChange={(e) => setFormData({...formData, descripcion: e.target.value})} placeholder="Ej. Escritura Pública..." />
+              <div className="col-span-2 space-y-2">
+                <Label>Descripcion del Tramite *</Label>
+                <Input value={formData.descripcion} onChange={(e) => setFormData({...formData, descripcion: e.target.value})} placeholder="Ej. Escritura Publica..." />
+              </div>
+              <div className="col-span-1 space-y-2">
+                <Label>Tipo de Calculo</Label>
+                <select
+                  value={formData.tipoCalculo}
+                  onChange={(e) => setFormData({...formData, tipoCalculo: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="NORMAL">Normal (calculo propio)</option>
+                  <option value="PORCENTAJE_SOBRE_TOTAL">% sobre total (aplica sobre otros actos)</option>
+                </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
               <div className="space-y-2">
-                <Label>Monto Mínimo ($)</Label>
+                <Label>Monto Minimo ($)</Label>
                 <Input type="number" step="0.01" value={formData.minimo} onChange={(e) => setFormData({...formData, minimo: e.target.value})} placeholder="0.00" />
               </div>
               <div className="space-y-2">
-                <Label>Monto Máximo o Tope ($)</Label>
+                <Label>Monto Maximo o Tope ($)</Label>
                 <Input type="number" step="0.01" value={formData.maximo} onChange={(e) => setFormData({...formData, maximo: e.target.value})} placeholder="0.00" />
               </div>
             </div>
@@ -251,16 +339,92 @@ export function ArancelesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
                 <Label>Porc. Excedente (%)</Label>
                 <Input type="number" step="0.01" value={formData.porcentaje2} onChange={(e) => setFormData({...formData, porcentaje2: e.target.value})} placeholder="Ej. 1.5" />
               </div>
-                <div className="space-y-2">
+              <div className="space-y-2">
                 <Label>Porc. Adicional (%)</Label>
                 <Input type="number" step="0.01" value={formData.porcentaje3} onChange={(e) => setFormData({...formData, porcentaje3: e.target.value})} placeholder="Ej. 1.5" />
               </div>
             </div>
 
-              <div className="space-y-2">
-                <Label>Adicional Fijo ($)</Label>
-                <Input type="number" step="0.01" value={formData.adicional} onChange={(e) => setFormData({...formData, adicional: e.target.value})} placeholder="0.00" />
+            <div className="space-y-2">
+              <Label>Adicional Fijo ($)</Label>
+              <Input type="number" step="0.01" value={formData.adicional} onChange={(e) => setFormData({...formData, adicional: e.target.value})} placeholder="0.00" />
+            </div>
+
+            {/* REGLAS DE CALCULO */}
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <Label className="text-sm font-semibold">Reglas de Calculo</Label>
+                  <p className="text-xs text-gray-500 mt-0.5">Configura honorarios differentes para actos individuales, combinados o exentos.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addRegla} className="gap-1">
+                  <Plus className="w-3 h-3" /> Agregar Regla
+                </Button>
               </div>
+
+              {reglas.length === 0 && (
+                <p className="text-xs text-gray-400 italic">Sin reglas configuradas. Se usa el arancel base.</p>
+              )}
+
+              <div className="space-y-3">
+                {reglas.map((regla, idx) => (
+                  <div key={idx} className="bg-white border rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label className="text-xs font-semibold">Tipo:</Label>
+                        <select
+                          value={regla.tipo}
+                          onChange={(e) => updateRegla(idx, 'tipo', e.target.value)}
+                          className="text-xs border rounded px-2 py-1"
+                        >
+                          <option value="INDIVIDUAL">Individual (acto solo)</option>
+                          <option value="COMBINADO">Combinado (con otros actos)</option>
+                          <option value="EXENTO">Exento (monto = 0)</option>
+                        </select>
+                        <Label className="text-xs font-semibold">Calculo:</Label>
+                        <select
+                          value={regla.tipoCalculo}
+                          onChange={(e) => updateRegla(idx, 'tipoCalculo', e.target.value)}
+                          className="text-xs border rounded px-2 py-1"
+                        >
+                          <option value="NORMAL">Normal</option>
+                          <option value="PORCENTAJE_SOBRE_TOTAL">% sobre total</option>
+                        </select>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeRegla(idx)}>
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Minimo ($)</Label>
+                        <Input type="number" step="0.01" value={regla.minimo} onChange={(e) => updateRegla(idx, 'minimo', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Maximo ($)</Label>
+                        <Input type="number" step="0.01" value={regla.maximo} onChange={(e) => updateRegla(idx, 'maximo', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Base %</Label>
+                        <Input type="number" step="0.01" value={regla.porcentaje1} onChange={(e) => updateRegla(idx, 'porcentaje1', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Exced. %</Label>
+                        <Input type="number" step="0.01" value={regla.porcentaje2} onChange={(e) => updateRegla(idx, 'porcentaje2', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Adic. %</Label>
+                        <Input type="number" step="0.01" value={regla.porcentaje3} onChange={(e) => updateRegla(idx, 'porcentaje3', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Adic. $</Label>
+                        <Input type="number" step="0.01" value={regla.adicional} onChange={(e) => updateRegla(idx, 'adicional', e.target.value)} placeholder="0" className="h-7 text-xs" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <DialogFooter className="mt-4 pt-4 border-t border-gray-100">
               <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isSaving}>Cancelar</Button>

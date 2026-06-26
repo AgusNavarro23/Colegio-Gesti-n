@@ -197,6 +197,8 @@ export async function GET(request: NextRequest) {
       include: {
         registro: true,
         escribano: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
       },
     });
 

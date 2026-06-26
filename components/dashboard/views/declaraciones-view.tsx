@@ -51,42 +51,76 @@ const formatDateForInput = (isoString: string) => {
   return new Date(isoString).toISOString().split('T')[0];
 };
 
-const calcularHonorario = (monto: number, arancel: any, cantidadAdicionales: number = 0) => {
+const seleccionarRegla = (arancel: any, monto: number, cantidadActos: number) => {
+  const reglas = arancel?.reglas || [];
+  if (reglas.length === 0) return null;
+
+  if (monto === 0) {
+    const r = reglas.find((r: any) => r.tipo === 'EXENTO');
+    if (r) return r;
+  }
+  if (cantidadActos > 1) {
+    const r = reglas.find((r: any) => r.tipo === 'COMBINADO');
+    if (r) return r;
+  }
+  const r = reglas.find((r: any) => r.tipo === 'INDIVIDUAL');
+  return r || null;
+};
+
+const calcularHonorario = (monto: number, arancel: any, cantidadAdicionales: number = 0, cantidadActos: number = 1) => {
   if (!arancel) return 0;
+
+  const regla = seleccionarRegla(arancel, monto, cantidadActos);
+  const params = regla || arancel;
+  const tc = params.tipoCalculo || 'NORMAL';
+
+  if (tc === 'PORCENTAJE_SOBRE_TOTAL') return 0;
+
   let honorario = 0;
 
-  // 1. Cálculo de base y excedente
-  if (arancel.maximo && monto > arancel.maximo) {
-    // Si tiene Porcentaje1, lo calcula normal. Si NO tiene (es 0), usa el "minimo" como monto base fijo.
-    const baseFija = arancel.porcentaje1 
-      ? (arancel.maximo * (arancel.porcentaje1 / 100)) 
-      : (arancel.minimo || 0);
-      
-    const excedente = monto - arancel.maximo;
-    const calculoExcedente = arancel.porcentaje2 ? (excedente * (arancel.porcentaje2 / 100)) : 0;
-    
+  if (params.maximo && monto > params.maximo) {
+    const baseFija = params.porcentaje1 
+      ? (params.maximo * (params.porcentaje1 / 100)) 
+      : (params.minimo || 0);
+    const excedente = monto - params.maximo;
+    const calculoExcedente = params.porcentaje2 ? (excedente * (params.porcentaje2 / 100)) : 0;
     honorario = baseFija + calculoExcedente;
   } else {
-    // Si no supera el máximo, calcula el porcentaje base (si existe)
-    honorario = arancel.porcentaje1 ? monto * (arancel.porcentaje1 / 100) : 0;
+    honorario = params.porcentaje1 ? monto * (params.porcentaje1 / 100) : 0;
   }
 
-  // 2. Control de tope mínimo (Piso obligatorio)
-  if (arancel.minimo && honorario < arancel.minimo) {
-    honorario = arancel.minimo;
+  if (params.minimo && honorario < params.minimo) {
+    honorario = params.minimo;
   }
 
-  // 3. Lógica de Adicionales
   if (cantidadAdicionales > 0) {
-    honorario += arancel.adicional * cantidadAdicionales;
+    honorario += (params.adicional || 0) * cantidadAdicionales;
   }
 
-  // 4. Lógica de Porcentaje Extra (Si aplica)
-  if (arancel.porcentaje3) {
-    honorario += (arancel.porcentaje3 / 100) * honorario;
+  if (params.porcentaje3) {
+    honorario += (params.porcentaje3 / 100) * honorario;
   }
 
   return honorario;
+};
+
+const calcularTotalConPorcentaje = (detalles: any[], subtotalNormal: number) => {
+  let total = subtotalNormal;
+  for (const d of detalles) {
+    const regla = d.arancel?.reglas?.find((r: any) => {
+      if (d.monto === 0) return r.tipo === 'EXENTO';
+      if (detalles.length > 1) return r.tipo === 'COMBINADO';
+      return r.tipo === 'INDIVIDUAL';
+    });
+    const params = regla || d.arancel;
+    if (params?.tipoCalculo === 'PORCENTAJE_SOBRE_TOTAL') {
+      const porcentaje3 = params.porcentaje3 || 0;
+      const honorario = subtotalNormal * (porcentaje3 / 100);
+      d.arancelCalculado = honorario;
+      total += honorario;
+    }
+  }
+  return total;
 };
 
 export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
@@ -214,16 +248,31 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     if (!currentArancelId || !currentMonto) return;
     const a = aranceles.find(a => a.id === currentArancelId);
     const m = parseFloat(currentMonto);
-    const arancelCalculado = calcularHonorario(m, a, 0);
-    
     const nuevosDetalles = [...detalles, { 
       arancel: a, arancelId: a.id, codigo: a.codigoRenta, descripcion: a.descripcion, 
-      monto: m, cantidadAdicionales: 0, arancelCalculado 
+      monto: m, cantidadAdicionales: 0, arancelCalculado: 0 
     }];
     
+    // Calcular subtotal de actos normales
+    const subtotalNormal = nuevosDetalles.reduce((sum, d) => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc === 'PORCENTAJE_SOBRE_TOTAL') return sum;
+      return sum + calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, nuevosDetalles.length);
+    }, 0);
+    
+    // Aplicar porcentajes sobre total y calcular total
+    const total = calcularTotalConPorcentaje(nuevosDetalles, subtotalNormal);
+    
+    // Asignar honorarios calculados
+    nuevosDetalles.forEach(d => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc !== 'PORCENTAJE_SOBRE_TOTAL') {
+        d.arancelCalculado = calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, nuevosDetalles.length);
+      }
+    });
+    
     setDetalles(nuevosDetalles);
-    // Recalcula y setea el arancel tipificado auto
-    setAranceltip(nuevosDetalles.reduce((sum, d) => sum + d.arancelCalculado, 0));
+    setAranceltip(total);
     
     setCurrentArancelId(''); setCurrentMonto(''); setArancelSearch('');
   };
@@ -233,18 +282,44 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     const current = newDetalles[index];
     const newCount = Math.max(0, (current.cantidadAdicionales || 0) + delta);
     current.cantidadAdicionales = newCount;
-    current.arancelCalculado = calcularHonorario(current.monto, current.arancel, newCount);
     
+    const subtotalNormal = newDetalles.reduce((sum, d) => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc === 'PORCENTAJE_SOBRE_TOTAL') return sum;
+      return sum + calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, newDetalles.length);
+    }, 0);
+    
+    newDetalles.forEach(d => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc !== 'PORCENTAJE_SOBRE_TOTAL') {
+        d.arancelCalculado = calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, newDetalles.length);
+      }
+    });
+    
+    const total = calcularTotalConPorcentaje(newDetalles, subtotalNormal);
     setDetalles(newDetalles);
-    // Recalcula y setea el arancel tipificado auto
-    setAranceltip(newDetalles.reduce((sum, d) => sum + d.arancelCalculado, 0));
+    setAranceltip(total);
   };
 
   const handleRemoveDetalle = (index: number) => {
     const newDetalles = detalles.filter((_, i) => i !== index);
+    
+    const subtotalNormal = newDetalles.reduce((sum, d) => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc === 'PORCENTAJE_SOBRE_TOTAL') return sum;
+      return sum + calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, newDetalles.length);
+    }, 0);
+    
+    newDetalles.forEach(d => {
+      const tc = d.arancel?.tipoCalculo || 'NORMAL';
+      if (tc !== 'PORCENTAJE_SOBRE_TOTAL') {
+        d.arancelCalculado = calcularHonorario(d.monto, d.arancel, d.cantidadAdicionales || 0, newDetalles.length);
+      }
+    });
+    
+    const total = calcularTotalConPorcentaje(newDetalles, subtotalNormal);
     setDetalles(newDetalles);
-    // Recalcula y setea el arancel tipificado auto
-    setAranceltip(newDetalles.reduce((sum, d) => sum + d.arancelCalculado, 0));
+    setAranceltip(total);
   };
 
   const handleOpenModal = () => {
@@ -264,11 +339,11 @@ export function DeclaracionesView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     setInscripcion(item.rubroA || 0); setImpuesto(0); setRecargoSellos(0); setActividadesEconomicas(0);
     
     setDetalles(item.detalles.map((d: any) => ({
-      arancel: d.arancel, arancelId: d.arancelId, codigo: d.arancel?.codigo, descripcion: d.arancel?.descripcion,
+      arancel: d.arancel, arancelId: d.arancelId, codigo: d.arancel?.codigoRenta, descripcion: d.arancel?.descripcion,
       monto: d.monto, cantidadAdicionales: 0, arancelCalculado: d.arancelCalculado
     })));
     
-    // Carga el arancel tipificado que se guardó
+    // Carga el arancel tipificado que se guardo
     setAranceltip(item.aranceltip || 0);
     
     setIsModalOpen(true);

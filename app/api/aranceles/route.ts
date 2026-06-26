@@ -8,6 +8,7 @@ export async function GET() {
   try {
     const aranceles = await prisma.arancel.findMany({
       orderBy: { codigoRenta: 'asc' },
+      include: { reglas: true },
     });
     return NextResponse.json(aranceles);
   } catch (error) {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
     const body = await request.json();
-    const { codigo, descripcion, minimo, maximo, porcentaje1, porcentaje2,porcentaje3, adicional, observaciones } = body;
+    const { codigo, descripcion, tipoCalculo, minimo, maximo, porcentaje1, porcentaje2, porcentaje3, adicional, observaciones, reglas } = body;
 
     if (!codigo || !descripcion) {
       return NextResponse.json({ error: 'Código y Descripción son obligatorios' }, { status: 400 });
@@ -35,14 +36,32 @@ export async function POST(request: NextRequest) {
       data: {
         codigoRenta: codigo,
         descripcion,
+        tipoCalculo: tipoCalculo || 'NORMAL',
         minimo: parseNumber(minimo),
         maximo: parseNumber(maximo),
         porcentaje1: parseNumber(porcentaje1),
         porcentaje2: parseNumber(porcentaje2),
         porcentaje3: parseNumber(porcentaje3),
         adicional: parseNumber(adicional),
+        observaciones: observaciones || null,
         createdById: user?.userId ?? null,
+        ...(Array.isArray(reglas) && reglas.length > 0 && {
+          reglas: {
+            create: reglas.map((r: any) => ({
+              tipo: r.tipo,
+              tipoCalculo: r.tipoCalculo || 'NORMAL',
+              minimo: parseNumber(r.minimo),
+              maximo: parseNumber(r.maximo),
+              porcentaje1: parseNumber(r.porcentaje1),
+              porcentaje2: parseNumber(r.porcentaje2),
+              porcentaje3: parseNumber(r.porcentaje3),
+              adicional: parseNumber(r.adicional),
+              observaciones: r.observaciones || null,
+            })),
+          },
+        }),
       },
+      include: { reglas: true },
     });
 
     return NextResponse.json(nuevo, { status: 201 });
@@ -56,23 +75,47 @@ export async function PUT(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
     const body = await request.json();
-    const { id, codigo, descripcion, minimo, maximo, porcentaje1, porcentaje2,porcentaje3, adicional, observaciones } = body;
+    const { id, codigo, descripcion, tipoCalculo, minimo, maximo, porcentaje1, porcentaje2, porcentaje3, adicional, observaciones, reglas } = body;
 
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
 
+    // Si se envian reglas, eliminar las existentes y recrear
+    const updateData: any = {
+      codigoRenta: codigo,
+      descripcion,
+      tipoCalculo: tipoCalculo || 'NORMAL',
+      minimo: parseNumber(minimo),
+      maximo: parseNumber(maximo),
+      porcentaje1: parseNumber(porcentaje1),
+      porcentaje2: parseNumber(porcentaje2),
+      porcentaje3: parseNumber(porcentaje3),
+      adicional: parseNumber(adicional),
+      observaciones: observaciones || null,
+      updatedById: user?.userId ?? null,
+    };
+
+    if (Array.isArray(reglas)) {
+      // Eliminar reglas existentes y recrear
+      await prisma.arancelRegla.deleteMany({ where: { arancelId: id } });
+      updateData.reglas = {
+        create: reglas.map((r: any) => ({
+          tipo: r.tipo,
+          tipoCalculo: r.tipoCalculo || 'NORMAL',
+          minimo: parseNumber(r.minimo),
+          maximo: parseNumber(r.maximo),
+          porcentaje1: parseNumber(r.porcentaje1),
+          porcentaje2: parseNumber(r.porcentaje2),
+          porcentaje3: parseNumber(r.porcentaje3),
+          adicional: parseNumber(r.adicional),
+          observaciones: r.observaciones || null,
+        })),
+      };
+    }
+
     const actualizado = await prisma.arancel.update({
       where: { id },
-      data: {
-        codigoRenta: codigo,
-        descripcion,
-        minimo: parseNumber(minimo),
-        maximo: parseNumber(maximo),
-        porcentaje1: parseNumber(porcentaje1),
-        porcentaje2: parseNumber(porcentaje2),
-        porcentaje3: parseNumber(porcentaje3),
-        adicional: parseNumber(adicional),
-        updatedById: user?.userId ?? null,
-      },
+      data: updateData,
+      include: { reglas: true },
     });
 
     return NextResponse.json(actualizado);

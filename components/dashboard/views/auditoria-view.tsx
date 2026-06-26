@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '../dashboard-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,11 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PaginationControls } from '@/components/dashboard/shared/pagination-controls';
 import { VerificacionDetailDialog } from '../shared/verificacion-detail-dialog';
 import { DashboardInteligenteView } from './smart-dashboard-view';
+import { ProgressModal } from '@/components/ui/progress-modal';
 import Swal from 'sweetalert2';
 import {
   Search, RefreshCcw, Loader2, Eye, CheckCircle, XCircle,
-  AlertTriangle, ListChecks, UploadCloud, CheckCircle2, BarChart3, FileText
+  AlertTriangle, ListChecks, UploadCloud, CheckCircle2, BarChart3, FileText, RotateCcw
 } from 'lucide-react';
+
+interface UserBrief {
+  id: string;
+  name: string | null;
+  email: string;
+}
 
 interface Verificacion {
   id: string;
@@ -39,13 +46,19 @@ interface Verificacion {
   prioridad: string;
   nivelRiesgo: string;
   motivos_riesgo: string;
+  observacion: string | null;
   estado: string;
   actos_resumen: string | null;
   detalles_arancel: string | null;
   pdfPath: string | null;
+  registroId: string | null;
+  escribanoId: string | null;
   createdAt: string;
+  createdBy: UserBrief | null;
+  updatedBy: UserBrief | null;
 }
 
+type Stage = { label: string; status: 'pending' | 'in-progress' | 'completed' };
 type TabType = 'cargar' | 'dashboard' | 'pendientes' | 'detalle';
 
 const ITEMS_PER_PAGE = 10;
@@ -162,13 +175,13 @@ export function AuditoriaView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
     }
   };
 
-  const handleUpdateEstado = async (id: string, nuevoEstado: string) => {
+  const handleUpdateEstado = async (id: string, nuevoEstado: string, observacion?: string) => {
     setIsUpdating(true);
     try {
       const res = await fetch(`/api/verificaciones/${id}/estado`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: nuevoEstado }),
+        body: JSON.stringify({ estado: nuevoEstado, observacion }),
       });
 
       if (!res.ok) throw new Error('Error al actualizar');
@@ -197,6 +210,153 @@ export function AuditoriaView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
       setIsUpdating(false);
     }
   };
+
+  const handleAprobarConDatos = async (id: string, datos: any) => {
+    setIsUpdating(true);
+    try {
+      const res = await fetch(`/api/verificaciones/${id}/estado`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+      });
+
+      if (!res.ok) throw new Error('Error al aprobar con modificaciones');
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Aprobada',
+        text: 'La verificacion ha sido aprobada con los datos modificados.',
+        timer: 2000,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+
+      fetchData();
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudo aprobar la verificacion',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const [reanalizarStages, setReanalizarStages] = useState<Stage[]>([]);
+  const [reanalizarProgress, setReanalizarProgress] = useState(false);
+  const reanalizarIdRef = useRef<string | null>(null);
+
+  const handleReanalizar = useCallback(async (id: string) => {
+    const hoy = new Date().toISOString().split('T')[0];
+
+    const { value: fechaPago } = await Swal.fire({
+      title: 'Fecha de Pago',
+      html: `
+        <div class="text-left">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Selecciona la fecha de pago para la declaracion:</label>
+          <input id="fecha-pago-reanalizar" type="date" value="${hoy}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+      `,
+      icon: 'info',
+      showCancelButton: true,
+      confirmButtonText: 'Re-Analizar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#2563eb',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      preConfirm: () => {
+        const input = document.getElementById('fecha-pago-reanalizar') as HTMLInputElement;
+        if (!input || !input.value) {
+          Swal.showValidationMessage('Debes seleccionar una fecha');
+          return false;
+        }
+        return input.value;
+      }
+    });
+
+    if (!fechaPago) return;
+
+    reanalizarIdRef.current = id;
+    setReanalizarStages([
+      { label: 'Enviando PDF al motor de validacion...', status: 'in-progress' },
+      { label: 'Extrayendo y validando datos...', status: 'pending' },
+      { label: 'Actualizando verificacion...', status: 'pending' },
+    ]);
+    setReanalizarProgress(true);
+
+    try {
+      const res = await fetch(`/api/verificaciones/${id}/re-analizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha_pago: fechaPago }),
+      });
+
+      setReanalizarStages(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'completed' } : s));
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || errData.error || 'Error al re-analizar');
+      }
+
+      setReanalizarStages(prev => prev.map((s, i) => i === 1 ? { ...s, status: 'completed' } : s));
+
+      setReanalizarStages(prev => prev.map((s, i) => i === 2 ? { ...s, status: 'completed' } : s));
+    } catch (error) {
+      setReanalizarProgress(false);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error instanceof Error ? error.message : 'No se pudo re-analizar',
+        confirmButtonText: 'Aceptar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+    }
+  }, []);
+
+  const handleReanalizarClose = useCallback(() => {
+    setReanalizarProgress(false);
+    if (reanalizarIdRef.current) {
+      fetchData();
+      reanalizarIdRef.current = null;
+    }
+  }, []);
+
+  const handleRejectClick = useCallback(async (id: string) => {
+    const { value: observacion } = await Swal.fire({
+      title: 'Rechazar Verificacion',
+      html: `
+        <div class="text-left">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Indique el motivo del rechazo:</label>
+          <textarea id="observacion-rechazo" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500" rows="4" placeholder="Describa las observaciones..."></textarea>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar Rechazo',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      preConfirm: () => {
+        const input = document.getElementById('observacion-rechazo') as HTMLTextAreaElement;
+        if (!input || !input.value.trim()) {
+          Swal.showValidationMessage('Debe ingresar una observacion');
+          return false;
+        }
+        return input.value.trim();
+      }
+    });
+
+    if (observacion) {
+      handleUpdateEstado(id, 'RECHAZADA', observacion);
+    }
+  }, []);
 
   const stats = {
     total: verificaciones.length,
@@ -262,10 +422,15 @@ export function AuditoriaView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
           <Button variant="ghost" size="icon" onClick={() => handleUpdateEstado(v.id, 'APROBADA')} title="Aprobar" disabled={isUpdating}>
             <CheckCircle className="w-4 h-4 text-green-600" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleUpdateEstado(v.id, 'RECHAZADA')} title="Rechazar" disabled={isUpdating}>
+          <Button variant="ghost" size="icon" onClick={() => handleRejectClick(v.id)} title="Rechazar" disabled={isUpdating}>
             <XCircle className="w-4 h-4 text-red-600" />
           </Button>
         </>
+      )}
+      {v.pdfPath && (
+        <Button variant="ghost" size="icon" onClick={() => handleReanalizar(v.id)} title="Re-Analizar PDF" disabled={isUpdating}>
+          <RotateCcw className="w-4 h-4 text-blue-500" />
+        </Button>
       )}
     </>
   );
@@ -552,7 +717,16 @@ export function AuditoriaView({ role }: { role: 'ADMIN' | 'EMPLOYEE' }) {
         onOpenChange={setIsDetailOpen}
         selectedItem={selectedItem}
         onUpdateEstado={handleUpdateEstado}
+        onConfirmAprobacion={handleAprobarConDatos}
         isUpdating={isUpdating}
+      />
+
+      <ProgressModal
+        isOpen={reanalizarProgress}
+        stages={reanalizarStages}
+        currentStage={reanalizarStages.findIndex(s => s.status === 'in-progress')}
+        totalFiles={1}
+        onClose={handleReanalizarClose}
       />
     </DashboardLayout>
   );

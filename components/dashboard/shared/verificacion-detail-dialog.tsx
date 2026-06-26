@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
+import Swal from 'sweetalert2';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,8 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   FileText, Calendar, DollarSign, ListChecks, AlertTriangle, ChevronRight,
-  X, CheckCircle, CheckCircle2, XCircle, XCircle as XCircleIcon
+  X, CheckCircle, CheckCircle2, XCircle, XCircle as XCircleIcon, User
 } from 'lucide-react';
+import { ConfirmarAprobacionDialog } from './confirmar-aprobacion-dialog';
+
+interface UserBrief {
+  id: string;
+  name: string | null;
+  email: string;
+}
 
 interface Verificacion {
   id: string;
@@ -33,18 +41,24 @@ interface Verificacion {
   prioridad: string;
   nivelRiesgo: string;
   motivos_riesgo: string;
+  observacion: string | null;
   estado: string;
   actos_resumen: string | null;
   detalles_arancel: string | null;
   pdfPath: string | null;
+  registroId: string | null;
+  escribanoId: string | null;
   createdAt: string;
+  createdBy: UserBrief | null;
+  updatedBy: UserBrief | null;
 }
 
 interface VerificacionDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedItem: Verificacion | null;
-  onUpdateEstado: (id: string, nuevoEstado: string) => void;
+  onUpdateEstado: (id: string, nuevoEstado: string, observacion?: string) => void;
+  onConfirmAprobacion: (id: string, datos: any) => Promise<void>;
   isUpdating: boolean;
 }
 
@@ -80,14 +94,47 @@ const getEstadoBadge = (estado: string) => {
   }
 };
 
-export function VerificacionDetailDialog({ open, onOpenChange, selectedItem, onUpdateEstado, isUpdating }: VerificacionDetailDialogProps) {
+export function VerificacionDetailDialog({ open, onOpenChange, selectedItem, onUpdateEstado, onConfirmAprobacion, isUpdating }: VerificacionDetailDialogProps) {
   const detailScrollRef = useRef<HTMLDivElement>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   useEffect(() => {
     if (open && detailScrollRef.current) {
       detailScrollRef.current.scrollTop = 0;
     }
   }, [open]);
+
+  const handleReject = useCallback(async (id: string) => {
+    const { value: observacion } = await Swal.fire({
+      title: 'Rechazar Verificacion',
+      html: `
+        <div class="text-left">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Indique el motivo del rechazo:</label>
+          <textarea id="observacion-rechazo" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500" rows="4" placeholder="Describa las observaciones..."></textarea>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar Rechazo',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Cancelar',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      preConfirm: () => {
+        const input = document.getElementById('observacion-rechazo') as HTMLTextAreaElement;
+        if (!input || !input.value.trim()) {
+          Swal.showValidationMessage('Debe ingresar una observacion');
+          return false;
+        }
+        return input.value.trim();
+      }
+    });
+
+    if (observacion) {
+      onUpdateEstado(id, 'RECHAZADA', observacion);
+      onOpenChange(false);
+    }
+  }, [onUpdateEstado, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -236,34 +283,66 @@ export function VerificacionDetailDialog({ open, onOpenChange, selectedItem, onU
                   </h3>
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <ul className="space-y-2">
-                      {selectedItem.motivos_riesgo.split(' | ').map((motivo, idx) => (
-                        <li key={idx} className="text-sm text-red-700 flex items-start gap-2">
-                          <ChevronRight className="w-4 h-4 mt-0.5 shrink-0" />
-                          <span>{motivo}</span>
-                        </li>
-                      ))}
+                      {selectedItem.motivos_riesgo.split(' | ').map((motivo, idx) => {
+                        const isError = motivo.toLowerCase().includes('inconsistencia critica') || motivo.toLowerCase().includes('identidad no autorizada') || motivo.toLowerCase().includes('duplicidad');
+                        const isWarning = motivo.toLowerCase().includes('inconsistencia moderada') || motivo.toLowerCase().includes('sobre-aporte');
+                        const isInfo = motivo.toLowerCase().includes('diferencia explicada');
+                        let dotColor = 'text-red-500';
+                        let bgShade = 'bg-red-100/50';
+                        if (isWarning) { dotColor = 'text-yellow-500'; bgShade = 'bg-yellow-100/50'; }
+                        if (isInfo) { dotColor = 'text-blue-500'; bgShade = 'bg-blue-100/50'; }
+                        return (
+                          <li key={idx} className={`text-sm rounded-md p-2 ${bgShade}`}>
+                            <div className="flex items-start gap-2">
+                              <span className={`${dotColor} mt-1`}>●</span>
+                              <span className="text-gray-800">{motivo}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Archivo de Origen */}
+            {/* Observacion (para rechazadas) */}
+            {selectedItem.observacion && (
+              <Card className="shadow-sm border-gray-300 mb-6 bg-gray-50">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <XCircleIcon className="w-4 h-4 text-red-500" /> Observaciones del Rechazo
+                  </h3>
+                  <div className="bg-white border border-gray-200 rounded-lg p-3">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedItem.observacion}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Informacion de Auditoria (usuarios) */}
             <Card className="shadow-sm mb-6">
               <CardContent className="p-5">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> Archivo de Origen
+                  <User className="w-4 h-4" /> Auditoria de Cambios
                 </h3>
-                <div className="bg-gray-50 p-3 rounded-lg flex items-center justify-between">
-                  <span className="text-sm text-gray-700 font-mono">{selectedItem.archivoOrigen}</span>
-                  <div className="flex items-center gap-2">
-                    {selectedItem.pdfPath && (
-                      <Button variant="outline" size="sm" onClick={() => window.open(selectedItem.pdfPath!, '_blank')} className="text-red-600 border-red-300 hover:bg-red-50">
-                        <FileText className="w-3.5 h-3.5 mr-1" /> Ver PDF
-                      </Button>
-                    )}
-                    <Badge variant="outline" className="text-xs">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString('es-AR') : ''}</Badge>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedItem.createdBy && (
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-xs text-blue-600 uppercase font-medium mb-1">Creado por</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.createdBy.name || selectedItem.createdBy.email}</p>
+                      <p className="text-xs text-gray-500">{selectedItem.createdBy.email}</p>
+                    </div>
+                  )}
+                  {selectedItem.updatedBy && (
+                    <div className={`p-3 rounded-lg ${selectedItem.estado === 'RECHAZADA' ? 'bg-red-50' : 'bg-green-50'}`}>
+                      <p className={`text-xs uppercase font-medium mb-1 ${selectedItem.estado === 'RECHAZADA' ? 'text-red-600' : 'text-green-600'}`}>
+                        {selectedItem.estado === 'RECHAZADA' ? 'Rechazado por' : 'Aprobado por'}
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.updatedBy.name || selectedItem.updatedBy.email}</p>
+                      <p className="text-xs text-gray-500">{selectedItem.updatedBy.email}</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -271,15 +350,43 @@ export function VerificacionDetailDialog({ open, onOpenChange, selectedItem, onU
             {/* Botones de Accion */}
             {selectedItem.estado === 'PENDIENTE_REVISION' && (
               <div className="flex gap-3 justify-end">
-                <Button variant="outline" onClick={() => { onUpdateEstado(selectedItem.id, 'RECHAZADA'); onOpenChange(false); }} disabled={isUpdating} className="border-red-300 text-red-600 hover:bg-red-50">
+                <Button variant="outline" onClick={() => handleReject(selectedItem.id)} disabled={isUpdating} className="border-red-300 text-red-600 hover:bg-red-50">
                   <XCircleIcon className="w-4 h-4 mr-2" /> Rechazar
                 </Button>
-                <Button onClick={() => { onUpdateEstado(selectedItem.id, 'APROBADA'); onOpenChange(false); }} disabled={isUpdating} className="bg-green-600 hover:bg-green-700">
+                <Button onClick={() => setShowConfirmDialog(true)} disabled={isUpdating} className="bg-green-600 hover:bg-green-700">
                   <CheckCircle2 className="w-4 h-4 mr-2" /> Aprobar
                 </Button>
               </div>
             )}
           </div>
+        )}
+
+        {/* Footer con info del PDF */}
+        {selectedItem && (
+          <div className="flex-none border-t bg-gray-50 px-4 sm:px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="w-4 h-4 text-red-500 shrink-0" />
+              <span className="text-sm text-gray-600 truncate">{selectedItem.archivoOrigen}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedItem.pdfPath && (
+                <Button variant="outline" size="sm" onClick={() => window.open(selectedItem.pdfPath!, '_blank')} className="text-red-600 border-red-300 hover:bg-red-50 text-xs h-8">
+                  <FileText className="w-3.5 h-3.5 mr-1" /> Abrir PDF
+                </Button>
+              )}
+              <span className="text-xs text-gray-400">{new Date(selectedItem.createdAt).toLocaleString('es-AR')}</span>
+            </div>
+          </div>
+        )}
+
+        {selectedItem && (
+          <ConfirmarAprobacionDialog
+            open={showConfirmDialog}
+            onOpenChange={setShowConfirmDialog}
+            verificacion={selectedItem}
+            onConfirm={onConfirmAprobacion}
+            isUpdating={isUpdating}
+          />
         )}
       </DialogContent>
     </Dialog>

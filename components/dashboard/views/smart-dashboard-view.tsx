@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
+import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Swal from 'sweetalert2'
@@ -174,11 +175,13 @@ export const DashboardInteligenteView = () => {
       }
 
       // Stage 1b: Upload to FastAPI for processing
+      const token = useAuthStore.getState().token
       const formData = new FormData()
       files.forEach(file => formData.append("archivos", file))
 
       const resFastAPI = await fetch("http://localhost:8000/api/procesar-batch", {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       })
 
