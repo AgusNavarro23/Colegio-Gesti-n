@@ -51,6 +51,8 @@ interface Verificacion {
   actos_resumen: string | null;
   detalles_arancel: string | null;
   pdfPath: string | null;
+  observaciones: string | null;
+  observaciones_pln: any;
   registroId: string | null;
   escribanoId: string | null;
   createdAt: string;

@@ -143,6 +143,7 @@ async function crearDeclaracionJurada(item: any, registro: any, escribano: any, 
     data: {
       numerodj,
       codigodj,
+      observaciones: item.observaciones || null,
       fecha_acto: fechaActoDate,
       fecha_vto: fechaVtoDate,
       fecha_pago: fechaPago,
@@ -251,6 +252,8 @@ export async function POST(request: NextRequest) {
 
       const codigo_dj = parseInt(String(item.codigo_dj || item.codigoDJ || 0), 10);
       const pdfPath = String(item.pdfPath || item.pdf_path || '');
+      const observaciones = String(item.observaciones || item.observacionNLP || '') || null;
+      const observaciones_pln = item.observaciones_pln || null;
       const actos_resumen = item.actos_resumen ? (Array.isArray(item.actos_resumen) ? JSON.stringify(item.actos_resumen) : String(item.actos_resumen)) : null;
       const detalles_arancel = item.detalles_arancel ? JSON.stringify(item.detalles_arancel) : null;
 
@@ -263,6 +266,8 @@ export async function POST(request: NextRequest) {
           nro_registro,
           cuit_escribano,
           nombre_oficial,
+          observaciones,
+          observaciones_pln,
           fecha_acto: fecha_acto_str,
           fecha_vto: fecha_vto || null,
           tipo_pago,

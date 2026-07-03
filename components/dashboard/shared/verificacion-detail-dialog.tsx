@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   FileText, Calendar, DollarSign, ListChecks, AlertTriangle, ChevronRight,
-  X, CheckCircle, CheckCircle2, XCircle, XCircle as XCircleIcon, User
+  X, CheckCircle, CheckCircle2, XCircle, XCircle as XCircleIcon, User,
+  Scale, Hash, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { ConfirmarAprobacionDialog } from './confirmar-aprobacion-dialog';
 
@@ -46,6 +47,8 @@ interface Verificacion {
   actos_resumen: string | null;
   detalles_arancel: string | null;
   pdfPath: string | null;
+  observaciones: string | null;
+  observaciones_pln: any;
   registroId: string | null;
   escribanoId: string | null;
   createdAt: string;
@@ -73,6 +76,13 @@ const getDiferencia = (v: Verificacion) => {
 const parseDetalles = (detallesJson: string | null) => {
   if (!detallesJson) return [];
   try { return JSON.parse(detallesJson); } catch { return []; }
+};
+
+const parsePln = (plnJson: any) => {
+  if (!plnJson) return null;
+  try {
+    return typeof plnJson === 'string' ? JSON.parse(plnJson) : plnJson;
+  } catch { return null; }
 };
 
 const getNivelBadge = (nivel: string) => {
@@ -239,6 +249,119 @@ export function VerificacionDetailDialog({ open, onOpenChange, selectedItem, onU
                 )}
               </CardContent>
             </Card>
+
+            {/* Análisis PLN o Texto Plano */}
+            {(() => {
+              const pln = parsePln(selectedItem.observaciones_pln);
+              if (pln) {
+                return (
+                  <Card className="shadow-sm mb-6">
+                    <CardContent className="p-5">
+                      <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Scale className="w-4 h-4" /> Análisis de Observaciones
+                      </h3>
+
+                      {/* Etapa 1: Intención Jurídica */}
+                      {pln.intencion_juridica?.intencion_detectada && (
+                        <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-purple-900 text-sm">Eje 1: Intención Jurídica</span>
+                            <Badge className="bg-purple-600 text-white text-xs">
+                              {pln.intencion_juridica.intencion_detectada}
+                            </Badge>
+                            <Badge className="bg-blue-600 text-white text-xs">
+                              {(pln.intencion_juridica.confianza * 100).toFixed(0)}%
+                            </Badge>
+                          </div>
+                          {pln.intencion_juridica.es_exencion_fiscal && (
+                            <Badge className="bg-yellow-500 text-black text-xs">Exención Fiscal</Badge>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Etapa 2: Moneda Extranjera */}
+                      {pln.montos_moneda_extranjera?.length > 0 && (
+                        <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium text-green-900 text-sm">Eje 2: Moneda Extranjera</span>
+                          </div>
+                          {pln.montos_moneda_extranjera.map((m: any, i: number) => (
+                            <div key={i} className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                              <div>
+                                <p className="text-xs text-green-600">Monto</p>
+                                <p className="font-medium text-green-900">
+                                  USD {m.monto_numerico?.toLocaleString('es-AR')}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-green-600">Tipo Cambio BNA</p>
+                                <p className="font-medium text-green-900">
+                                  {formatMoney(m.cotizacion_bna)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-green-600">Escribano</p>
+                                <p className="font-medium text-green-900">
+                                  {m.cotizacion_escribano ? formatMoney(m.cotizacion_escribano) : '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-green-600">Diferencia</p>
+                                {m.diferencia_porcentual != null ? (
+                                  <p className={`font-medium flex items-center gap-1 ${
+                                    m.diferencia_porcentual > 0 ? 'text-red-600' : 'text-green-600'
+                                  }`}>
+                                    {m.diferencia_porcentual > 0
+                                      ? <TrendingUp className="w-3 h-3" />
+                                      : <TrendingDown className="w-3 h-3" />
+                                    }
+                                    {m.diferencia_porcentual > 0 ? '+' : ''}{m.diferencia_porcentual}%
+                                  </p>
+                                ) : <p className="text-gray-400">—</p>}
+                              </div>
+                              <div className="col-span-2 sm:col-span-4 border-t border-green-200 pt-2 mt-1">
+                                <p className="text-xs text-green-600">Total en Pesos</p>
+                                <p className="font-bold text-green-900 text-base">
+                                  {formatMoney(m.monto_en_pesos)}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Etapa 3: Multiplicadores */}
+                      {pln.multiplicadores?.cantidad_extraida > 0 && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center gap-2">
+                            <Hash className="w-4 h-4 text-blue-600" />
+                            <span className="font-medium text-blue-900 text-sm">Eje 3: Multiplicadores</span>
+                          </div>
+                          <p className="text-sm text-blue-800 mt-1">
+                            {pln.multiplicadores.entidad}: {pln.multiplicadores.fuente}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              }
+              if (selectedItem.observaciones) {
+                return (
+                  <Card className="shadow-sm mb-6">
+                    <CardContent className="p-5">
+                      <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4" /> Observaciones
+                      </h3>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedItem.observaciones}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              return null;
+            })()}
 
             {/* Resumen de Liquidacion */}
             <div className="flex justify-end mb-6">

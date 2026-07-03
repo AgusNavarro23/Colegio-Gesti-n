@@ -132,9 +132,10 @@ model ArancelRegla {
 }
 
 model DeclaracionJurada {
-  id         String   @id @default(cuid())
-  numerodj   String
-  codigodj   String
+  id           String   @id @default(cuid())
+  numerodj     String
+  codigodj     String
+  observaciones String?
   fecha_acto DateTime
   fecha_vto  DateTime
   fecha_pago DateTime?
@@ -205,6 +206,8 @@ model DeclaracionVerificar {
   motivos_riesgo    String?
   estado            String   @default("PENDIENTE_REVISION")
   observacion       String?
+  observaciones     String?
+  observaciones_pln Json?      // Resultado del análisis PLN (3 ejes)
   actos_resumen     String?
   detalles_arancel  String?
   pdfPath           String?

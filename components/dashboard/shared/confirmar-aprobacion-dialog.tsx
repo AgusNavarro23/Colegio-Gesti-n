@@ -42,6 +42,7 @@ interface Verificacion {
   actos_resumen: string | null;
   detalles_arancel: string | null;
   pdfPath: string | null;
+  observaciones: string | null;
   registroId: string | null;
   escribanoId: string | null;
   createdAt: string;
@@ -109,6 +110,7 @@ export function ConfirmarAprobacionDialog({ open, onOpenChange, verificacion, on
   const [rubroD, setRubroD] = useState(0);
   const [total, setTotal] = useState(0);
   const [actos, setActos] = useState<ActoRow[]>([]);
+  const [observaciones, setObservaciones] = useState('');
 
   const [escribanoSearch, setEscribanoSearch] = useState('');
 
@@ -144,6 +146,7 @@ export function ConfirmarAprobacionDialog({ open, onOpenChange, verificacion, on
     setRubroC(verificacion.rubroC || 0);
     setRubroD(verificacion.rubroD || 0);
     setTotal(verificacion.total_general || 0);
+    setObservaciones(verificacion.observaciones || '');
 
     try {
       const parsed = verificacion.actos_resumen ? JSON.parse(verificacion.actos_resumen) : [];
@@ -193,6 +196,7 @@ export function ConfirmarAprobacionDialog({ open, onOpenChange, verificacion, on
     if (rubroC !== verificacion.rubroC) datos.rubroC = rubroC;
     if (rubroD !== verificacion.rubroD) datos.rubroD = rubroD;
     if (total !== verificacion.total_general) datos.total = total;
+    if (observaciones !== (verificacion.observaciones || '')) datos.observaciones = observaciones;
 
     const actosOriginal = verificacion.actos_resumen
       ? (() => { try { return JSON.parse(verificacion.actos_resumen); } catch { return null; } })()
@@ -361,6 +365,17 @@ export function ConfirmarAprobacionDialog({ open, onOpenChange, verificacion, on
               <Button variant="outline" size="sm" onClick={agregarActo} className="mt-2">
                 <Plus className="w-4 h-4 mr-1" /> Agregar Acto
               </Button>
+            </div>
+
+            {/* Observaciones */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">Observaciones</h3>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary min-h-[80px]"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Texto extraido del campo Observaciones del formulario DJ"
+              />
             </div>
 
             {/* Liquidacion */}

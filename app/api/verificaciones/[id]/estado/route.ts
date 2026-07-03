@@ -70,7 +70,7 @@ function calcularHonorarioConRegla(monto: number, arancel: any, cantidadActos: n
   if (tc === 'PORCENTAJE_SOBRE_TOTAL') return 0;
 
   let honorario = 0;
-  if (maximo > 0 && monto > maximo) {
+  if (maximo > 0 && monto > maximo && porcentaje2 > 0) {
     const base = porcentaje1 > 0 ? maximo * (porcentaje1 / 100) : minimo;
     const excedente = monto - maximo;
     const extra = porcentaje2 > 0 ? excedente * (porcentaje2 / 100) : 0;
@@ -80,7 +80,7 @@ function calcularHonorarioConRegla(monto: number, arancel: any, cantidadActos: n
   }
   if (minimo > 0 && honorario < minimo) honorario = minimo;
   if (porcentaje3 > 0) honorario += (porcentaje3 / 100) * honorario;
-  return honorario;
+  return Math.round(honorario * 100) / 100;
 }
 
 function calcularPorcentajeSobreTotal(arancel: any, monto: number, subtotalNormal: number, cantidadActos: number): number {
@@ -234,6 +234,7 @@ export async function PATCH(
               data: {
                 numerodj,
                 codigodj,
+                observaciones: overrides.observaciones !== undefined ? overrides.observaciones : (verificacion as any).observaciones || null,
                 fecha_acto: fechaActoDate,
                 fecha_vto: fechaVtoDate,
                 fecha_pago: fp,

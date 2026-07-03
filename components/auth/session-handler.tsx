@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
 import Swal from 'sweetalert2';
 
-const INACTIVITY_LIMIT = 3 * 60 * 1000; // 3 Minutos en milisegundos
+const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 Minutos en milisegundos
 
 export function SessionHandler() {
   const { isAuthenticated, logout } = useAuthStore();

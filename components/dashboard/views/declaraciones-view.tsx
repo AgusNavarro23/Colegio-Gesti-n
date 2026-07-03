@@ -78,7 +78,7 @@ const calcularHonorario = (monto: number, arancel: any, cantidadAdicionales: num
 
   let honorario = 0;
 
-  if (params.maximo && monto > params.maximo) {
+  if (params.maximo && monto > params.maximo && params.porcentaje2) {
     const baseFija = params.porcentaje1 
       ? (params.maximo * (params.porcentaje1 / 100)) 
       : (params.minimo || 0);
@@ -101,7 +101,7 @@ const calcularHonorario = (monto: number, arancel: any, cantidadAdicionales: num
     honorario += (params.porcentaje3 / 100) * honorario;
   }
 
-  return honorario;
+  return Math.round(honorario * 100) / 100;
 };
 
 const calcularTotalConPorcentaje = (detalles: any[], subtotalNormal: number) => {
